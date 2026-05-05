@@ -1,0 +1,53 @@
+stages:
+  fetch:
+    cmd: uv run python src/data/fetch_data.py
+    deps:
+      - src/data/fetch_data.py
+    params:
+      - fetch.raw_dir
+    outs:
+      - data/raw/flights_raw.csv:
+          persist: true
+    always_changed: true
+
+  preprocess:
+    cmd: uv run python src/data/preprocess_data.py
+    deps:
+      - src/data/preprocess_data.py
+      - data/raw/flights_raw.csv
+    params:
+      - preprocess
+    outs:
+      - data/preprocessed/flights.csv:
+          persist: true
+
+  validate:
+    cmd: cd gx && uv run python run_checkpoint.py
+    deps:
+      - data/preprocessed/flights.csv
+    outs:
+      - gx/uncommitted:
+          persist: true
+
+  test_data:
+    cmd: uv run python src/data/test_data.py
+    deps:
+      - data/preprocessed/flights.csv
+      - src/data/test_data.py
+    outs:
+      - data/reference:
+          persist: true
+
+  train:
+    cmd: uv run python src/model/train.py
+    deps:
+      - src/model/preprocess.py
+      - src/model/train.py
+      - data/preprocessed/flights.csv
+      - gx/uncommitted
+      - data/reference
+    params:
+      - train
+    outs:
+      - models:
+          persist: true
