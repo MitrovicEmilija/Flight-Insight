@@ -6,7 +6,7 @@ stages:
     params:
       - fetch.raw_dir
     outs:
-      - data/raw/flights_raw.csv:
+      - data/raw/_combined.csv:
           persist: true
     always_changed: true
 
@@ -14,7 +14,7 @@ stages:
     cmd: uv run python src/data/preprocess_data.py
     deps:
       - src/data/preprocess_data.py
-      - data/raw/flights_raw.csv
+      - data/raw/_combined.csv
     params:
       - preprocess
     outs:

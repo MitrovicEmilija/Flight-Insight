@@ -7,7 +7,7 @@ import yaml
 
 
 def load_raw_data(raw_dir: str) -> pd.DataFrame:
-    path = os.path.join(raw_dir, "flights_raw.csv")
+    path = os.path.join(raw_dir, "_combined.csv")
     if not os.path.exists(path):
         print(f"ERROR: {path} does not exist. Run fetch_data.py first.")
         sys.exit(1)

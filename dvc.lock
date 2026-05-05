@@ -5,13 +5,13 @@ stages:
     deps:
     - path: src/data/fetch_data.py
       hash: md5
-      md5: a724baeeb226ed16414e6e7cb20ac342
-      size: 2159
+      md5: 194eddd6b41e33440f78f1ccce90b782
+      size: 2481
     params:
       params.yaml:
         fetch.raw_dir: data/raw
     outs:
-    - path: data/raw/flights_raw.csv
+    - path: data/raw/_combined.csv
       hash: md5
       md5: b322b00f6c48b60b825a127bde9e92f1
       size: 452665225
@@ -20,8 +20,8 @@ stages:
     deps:
     - path: data/raw/flights_raw.csv
       hash: md5
-      md5: b322b00f6c48b60b825a127bde9e92f1
-      size: 452665225
+      md5: ccc0ff53b85ecbba3c7167482e302dc1
+      size: 905328623
     - path: src/data/preprocess_data.py
       hash: md5
       md5: bb76023d87bbfcc20b477e356398c0ba
@@ -38,3 +38,74 @@ stages:
       hash: md5
       md5: e189b9ce411de50028e03fb548c0e231
       size: 81916603
+  validate:
+    cmd: cd gx && uv run python run_checkpoint.py
+    deps:
+    - path: data/preprocessed/flights.csv
+      hash: md5
+      md5: e189b9ce411de50028e03fb548c0e231
+      size: 81916603
+    outs:
+    - path: gx/uncommitted
+      hash: md5
+      md5: ab2b81136b5d249a84e5a62b0039d8a7.dir
+      size: 4349027
+      nfiles: 28
+  test_data:
+    cmd: uv run python src/data/test_data.py
+    deps:
+    - path: data/preprocessed/flights.csv
+      hash: md5
+      md5: e189b9ce411de50028e03fb548c0e231
+      size: 81916603
+    - path: src/data/test_data.py
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0
+    outs:
+    - path: data/reference
+      hash: md5
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+  train:
+    cmd: uv run python src/model/train.py
+    deps:
+    - path: data/preprocessed/flights.csv
+      hash: md5
+      md5: e189b9ce411de50028e03fb548c0e231
+      size: 81916603
+    - path: data/reference
+      hash: md5
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+    - path: gx/uncommitted
+      hash: md5
+      md5: ab2b81136b5d249a84e5a62b0039d8a7.dir
+      size: 4349027
+      nfiles: 28
+    - path: src/model/preprocess.py
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0
+    - path: src/model/train.py
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0
+    params:
+      params.yaml:
+        train:
+          test_size: 0.2
+          random_state: 42
+          target_col: DepDelayMinutes
+          n_estimators: 500
+          max_depth: 8
+          learning_rate: 0.05
+          subsample: 0.8
+    outs:
+    - path: models
+      hash: md5
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0

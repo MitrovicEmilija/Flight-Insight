@@ -1,0 +1,216 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "flights_suite",
+  "expectations": [
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "max_value": 10000000,
+        "min_value": 100000
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "Year",
+          "Month",
+          "DayofMonth",
+          "DayOfWeek",
+          "FlightDate",
+          "Marketing_Airline_Network",
+          "Origin",
+          "OriginCityName",
+          "Dest",
+          "DestCityName",
+          "CRSDepTime",
+          "CRSArrTime",
+          "Distance",
+          "CRSElapsedTime",
+          "CarrierDelay",
+          "WeatherDelay",
+          "NASDelay",
+          "SecurityDelay",
+          "LateAircraftDelay",
+          "DepDelayMinutes",
+          "dep_hour",
+          "time_of_day",
+          "is_weekend",
+          "season",
+          "route",
+          "distance_group"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "DepDelayMinutes"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Origin"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Dest"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Marketing_Airline_Network"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "FlightDate"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "DepDelayMinutes",
+        "max_value": 3500,
+        "min_value": 0
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Distance",
+        "max_value": 6000,
+        "min_value": 10
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "dep_hour",
+        "max_value": 23,
+        "min_value": 0
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "DayOfWeek",
+        "max_value": 7,
+        "min_value": 1
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Month",
+        "max_value": 12,
+        "min_value": 1
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Year",
+        "max_value": 2030,
+        "min_value": 2018
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "is_weekend",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "time_of_day",
+        "value_set": [
+          "morning",
+          "afternoon",
+          "evening",
+          "night"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "season",
+        "value_set": [
+          "winter",
+          "spring",
+          "summer",
+          "fall"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "distance_group",
+        "value_set": [
+          "short",
+          "medium",
+          "long",
+          "very_long"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_equal",
+      "kwargs": {
+        "column": "Origin",
+        "value": 3
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_equal",
+      "kwargs": {
+        "column": "Dest",
+        "value": 3
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "Marketing_Airline_Network",
+        "max_value": 3,
+        "min_value": 2
+      },
+      "meta": {}
+    }
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.21"
+  }
+}
