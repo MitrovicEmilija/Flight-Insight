@@ -1,0 +1,40 @@
+schema: '2.0'
+stages:
+  fetch:
+    cmd: uv run python src/data/fetch_data.py
+    deps:
+    - path: src/data/fetch_data.py
+      hash: md5
+      md5: a724baeeb226ed16414e6e7cb20ac342
+      size: 2159
+    params:
+      params.yaml:
+        fetch.raw_dir: data/raw
+    outs:
+    - path: data/raw/flights_raw.csv
+      hash: md5
+      md5: b322b00f6c48b60b825a127bde9e92f1
+      size: 452665225
+  preprocess:
+    cmd: uv run python src/data/preprocess_data.py
+    deps:
+    - path: data/raw/flights_raw.csv
+      hash: md5
+      md5: b322b00f6c48b60b825a127bde9e92f1
+      size: 452665225
+    - path: src/data/preprocess_data.py
+      hash: md5
+      md5: bb76023d87bbfcc20b477e356398c0ba
+      size: 6076
+    params:
+      params.yaml:
+        preprocess:
+          output_path: data/preprocessed/flights.csv
+          drop_cancelled: true
+          drop_diverted: true
+          filter_year: 2024
+    outs:
+    - path: data/preprocessed/flights.csv
+      hash: md5
+      md5: e189b9ce411de50028e03fb548c0e231
+      size: 81916603
