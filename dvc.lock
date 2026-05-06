@@ -13,55 +13,56 @@ stages:
     outs:
     - path: data/raw/_combined.csv
       hash: md5
-      md5: 7c53b04693e36d2db285caaa7b08e16f
-      size: 978033254
+      md5: 8b47a803b0bc936075217affc1acccc7
+      size: 1214518552
   preprocess:
     cmd: uv run python src/data/preprocess_data.py
     deps:
     - path: data/raw/_combined.csv
       hash: md5
-      md5: 7c53b04693e36d2db285caaa7b08e16f
-      size: 978033254
+      md5: 8b47a803b0bc936075217affc1acccc7
+      size: 1214518552
     - path: src/data/preprocess_data.py
       hash: md5
-      md5: d284ef7e65e15af9f6a99c55fa961a90
-      size: 7234
+      md5: d69db58cd388fc3aba2783f7330d8a77
+      size: 7345
     params:
       params.yaml:
         preprocess:
           output_path: data/preprocessed/flights.csv
           drop_cancelled: true
           drop_diverted: true
-          filter_year: 2024
+          reference_year: 2024
+          current_year: 2025
     outs:
     - path: data/preprocessed/flights.csv
       hash: md5
-      md5: bf762734d7916250876f7c09b96d8221
-      size: 352780801
+      md5: 1352108d0568c49ce3f5afa6072229bd
+      size: 437593397
   validate:
     cmd: cd gx && uv run python run_checkpoint.py
     deps:
     - path: data/preprocessed/flights.csv
       hash: md5
-      md5: bf762734d7916250876f7c09b96d8221
-      size: 352780801
+      md5: 1352108d0568c49ce3f5afa6072229bd
+      size: 437593397
     outs:
     - path: gx/uncommitted
       hash: md5
-      md5: 46462f8557816eb539e05055c92f5b6d.dir
-      size: 4448361
-      nfiles: 30
+      md5: 5a2dfd55fdca85270c52d9516d1ca683.dir
+      size: 4547691
+      nfiles: 32
   test_data:
     cmd: uv run python src/data/test_data.py
     deps:
     - path: data/preprocessed/flights_current.csv
       hash: md5
-      md5: cd91d949b9189df35586170a46656404
-      size: 190591679
+      md5: 634addb6e832e5ad3891282f7e3e6f24
+      size: 84812894
     - path: data/preprocessed/flights_reference.csv
       hash: md5
-      md5: 18b717407f0846bf461ac8dea7dee144
-      size: 162189420
+      md5: bf762734d7916250876f7c09b96d8221
+      size: 352780801
     - path: src/data/test_data.py
       hash: md5
       md5: 9000a27700d140d93afe6c4618099b93
@@ -69,30 +70,30 @@ stages:
     outs:
     - path: data/reference
       hash: md5
-      md5: 8a3b8a5feac51984f1c1a1eeeaea74f0.dir
-      size: 190591679
+      md5: 5dc16f8e0fdcc8828efce2a3ceb570b3.dir
+      size: 84812894
       nfiles: 1
     - path: reports/drift_report.html
       hash: md5
-      md5: f9805bc8c525bef1bda94654b3dc01a8
-      size: 4882488
+      md5: 0c66a8ca9ccd637e7ea3824e93216bd9
+      size: 4880823
   train:
     cmd: uv run python src/model/train.py
     deps:
     - path: data/preprocessed/flights.csv
       hash: md5
-      md5: bf762734d7916250876f7c09b96d8221
-      size: 352780801
+      md5: 1352108d0568c49ce3f5afa6072229bd
+      size: 437593397
     - path: data/reference
       hash: md5
-      md5: d751713988987e9331980363e24189ce.dir
-      size: 0
-      nfiles: 0
+      md5: 5dc16f8e0fdcc8828efce2a3ceb570b3.dir
+      size: 84812894
+      nfiles: 1
     - path: gx/uncommitted
       hash: md5
-      md5: 46462f8557816eb539e05055c92f5b6d.dir
-      size: 4448361
-      nfiles: 30
+      md5: 5a2dfd55fdca85270c52d9516d1ca683.dir
+      size: 4547691
+      nfiles: 32
     - path: src/model/preprocess.py
       hash: md5
       md5: d41d8cd98f00b204e9800998ecf8427e

@@ -5,13 +5,15 @@ fetch:
     - { year: 2024, month: 2 }
     - { year: 2024, month: 7 }
     - { year: 2024, month: 8 }
+    - { year: 2025, month: 1 }
 
 
 preprocess:
   output_path: "data/preprocessed/flights.csv"
   drop_cancelled: true
   drop_diverted: true
-  filter_year: 2024
+  reference_year: 2024
+  current_year: 2025
 
 train:
   test_size: 0.2

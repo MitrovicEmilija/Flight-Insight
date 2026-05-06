@@ -17,12 +17,7 @@ def load_raw_data(raw_dir: str) -> pd.DataFrame:
     print(f"  Read {len(df):,} rows, {len(df.columns):,} columns.")
     return df
 
-def filter_year(df: pd.DataFrame, year: int) -> pd.DataFrame:
-    if "Year" in df.columns and year is not None:
-        n_before = len(df)
-        df = df[df["Year"] == year].copy()
-        print(f"  Filtered for year {year}: {len(df):,} rows (from {n_before:,})")
-    return df
+
 
 def clean_data(df: pd.DataFrame, params: dict) -> pd.DataFrame:
     n_start = len(df)
@@ -52,7 +47,10 @@ def clean_data(df: pd.DataFrame, params: dict) -> pd.DataFrame:
     df = df.drop_duplicates()
     if n_before - len(df) > 0:
         print(f"  Removed {n_before - len(df):,} duplicate rows.")
+
     return df
+
+
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # Hour of departure from CRSDepTime (format: hhmm)
@@ -112,6 +110,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     print("  Filled NaN in delay cause columns")
     return df
 
+
+
 def select_final_columns(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         # Date and time
@@ -143,16 +143,21 @@ def select_final_columns(df: pd.DataFrame) -> pd.DataFrame:
     print(f"  Selected {len(df.columns)} columns")
     return df
 
-def split_reference_current(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    if "Month" not in df.columns:
-        print("  OPOZORILO: Month stolpec ne obstaja, ne morem narediti split-a")
+
+def split_by_year(df: pd.DataFrame, reference_year: int, current_year: int):
+    if "Year" not in df.columns:
+        print("  OPOZORILO: Year stolpec ne obstaja, ne morem narediti split-a")
         return df, df
 
-    reference = df[df["Month"].between(1, 6)].copy()
-    current = df[df["Month"].between(7, 12)].copy()
+    reference = df[df["Year"] == reference_year].copy()
+    current = df[df["Year"] == current_year].copy()
 
-    print(f"  Reference (jan-jun): {len(reference):,} vrstic")
-    print(f"  Current   (jul-dec): {len(current):,} vrstic")
+    print(f"  Reference (leto {reference_year}): {len(reference):,} vrstic")
+    print(f"  Current   (leto {current_year}): {len(current):,} vrstic")
+
+    if len(current) == 0:
+        print(f"  OPOZORILO: Ni podatkov za current_year={current_year}!")
+        print("  Preveri, da si v params.yaml dodala mesec za to leto.")
 
     return reference, current
 
@@ -164,37 +169,33 @@ def main():
     raw_dir = params["fetch"]["raw_dir"]
     output_path = params["preprocess"]["output_path"]
     preprocess_params = params["preprocess"]
-    filter_year_val = preprocess_params.get("filter_year", None)
+    reference_year = preprocess_params.get("reference_year", 2024)
+    current_year = preprocess_params.get("current_year", 2025)
 
-    # 1. Load raw data
+    # 1. Naloži
     df = load_raw_data(raw_dir)
 
-    # 2. Filter year
-    if filter_year_val:
-        print(f"  Filtering year: {filter_year_val}")
-        df = filter_year(df, filter_year_val)
-
-    # 3. Clean data
-    print("\nData cleaning:")
+    # 2. Čiščenje
+    print("\nČiščenje podatkov:")
     df = clean_data(df, preprocess_params)
 
-    # 4. Feature engineering
+    # 3. Feature engineering
     print("\nFeature engineering:")
     df = engineer_features(df)
 
-    # 5. Choose final columns
-    print("\nChoosing final columns:")
+    # 4. Izberi končne stolpce
+    print("\nIzbira stolpcev:")
     df = select_final_columns(df)
 
-    # 6. Save
+    # 5. Shrani VSE podatke (oba leta, za trening)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df.to_csv(output_path, index=False)
-    print(f"\nShranjeno (vsi podatki): {output_path}")
+    print(f"\nShranjeno (vsi podatki, oba leta): {output_path}")
     print(f"  Vrstic: {len(df):,}, Stolpcev: {len(df.columns)}")
 
-    # 7. NOVO: Razdeli na reference / current za drift detection
-    print("\nRazdelitev za drift simulacijo (reference vs current):")
-    reference, current = split_reference_current(df)
+    # 6. Razdeli po LETU za drift detection
+    print(f"\nRazdelitev po letu (reference={reference_year} vs current={current_year}):")
+    reference, current = split_by_year(df, reference_year, current_year)
 
     output_dir = os.path.dirname(output_path)
     reference_path = os.path.join(output_dir, "flights_reference.csv")
@@ -203,17 +204,17 @@ def main():
     reference.to_csv(reference_path, index=False)
     current.to_csv(current_path, index=False)
 
-
     print(f"\n{'=' * 60}")
-    print(f"Saved in: {output_path}")
-    print(f"Rows: {len(df):,}")
-    print(f"Columns: {len(df.columns)}")
-    print(f"Reference: {reference_path}")
-    print(f"Current:   {current_path}")
-    print(f"\nTarget (DepDelayMinutes):")
-    print(df["DepDelayMinutes"].describe())
-    print(f"\nFirst 5 rows:")
-    print(df.head())
+    print(f"Reference ({reference_year}): {reference_path}")
+    print(f"Current   ({current_year}): {current_path}")
+
+    if len(current) > 0:
+        print(f"\nTarget statistika (drift po letu):")
+        print(f"  {reference_year} DepDelayMinutes: mean={reference['DepDelayMinutes'].mean():.2f}, "
+              f"median={reference['DepDelayMinutes'].median():.2f}")
+        print(f"  {current_year} DepDelayMinutes: mean={current['DepDelayMinutes'].mean():.2f}, "
+              f"median={current['DepDelayMinutes'].median():.2f}")
+
 
 if __name__ == "__main__":
     main()
