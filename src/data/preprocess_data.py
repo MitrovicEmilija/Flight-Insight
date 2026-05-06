@@ -143,6 +143,20 @@ def select_final_columns(df: pd.DataFrame) -> pd.DataFrame:
     print(f"  Selected {len(df.columns)} columns")
     return df
 
+def split_reference_current(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if "Month" not in df.columns:
+        print("  OPOZORILO: Month stolpec ne obstaja, ne morem narediti split-a")
+        return df, df
+
+    reference = df[df["Month"].between(1, 6)].copy()
+    current = df[df["Month"].between(7, 12)].copy()
+
+    print(f"  Reference (jan-jun): {len(reference):,} vrstic")
+    print(f"  Current   (jul-dec): {len(current):,} vrstic")
+
+    return reference, current
+
+
 def main():
     with open("params.yaml", "r") as f:
         params = yaml.safe_load(f)
@@ -175,11 +189,27 @@ def main():
     # 6. Save
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df.to_csv(output_path, index=False)
+    print(f"\nShranjeno (vsi podatki): {output_path}")
+    print(f"  Vrstic: {len(df):,}, Stolpcev: {len(df.columns)}")
+
+    # 7. NOVO: Razdeli na reference / current za drift detection
+    print("\nRazdelitev za drift simulacijo (reference vs current):")
+    reference, current = split_reference_current(df)
+
+    output_dir = os.path.dirname(output_path)
+    reference_path = os.path.join(output_dir, "flights_reference.csv")
+    current_path = os.path.join(output_dir, "flights_current.csv")
+
+    reference.to_csv(reference_path, index=False)
+    current.to_csv(current_path, index=False)
+
 
     print(f"\n{'=' * 60}")
     print(f"Saved in: {output_path}")
     print(f"Rows: {len(df):,}")
     print(f"Columns: {len(df.columns)}")
+    print(f"Reference: {reference_path}")
+    print(f"Current:   {current_path}")
     print(f"\nTarget (DepDelayMinutes):")
     print(df["DepDelayMinutes"].describe())
     print(f"\nFirst 5 rows:")

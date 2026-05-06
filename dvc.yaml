@@ -32,10 +32,13 @@ stages:
   test_data:
     cmd: uv run python src/data/test_data.py
     deps:
-      - data/preprocessed/flights.csv
+      - data/preprocessed/flights_reference.csv
+      - data/preprocessed/flights_current.csv
       - src/data/test_data.py
     outs:
       - data/reference:
+          persist: true
+      - reports/drift_report.html:
           persist: true
 
   train:
