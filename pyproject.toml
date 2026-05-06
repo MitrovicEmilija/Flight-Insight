@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dvc[s3]>=3.67.1",
+    "evidently>=0.7.21",
     "great-expectations==0.18.21",
     "lxml>=6.1.0",
     "numpy>=1.26,<2.0",
