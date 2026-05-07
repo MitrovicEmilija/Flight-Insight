@@ -153,7 +153,7 @@ def update_reference(current_path: str) -> None:
 
 def main():
     print("=" * 60)
-    print("FlightInsight — Drift Detection (apples-to-apples)")
+    print("FlightInsight — Drift Detection")
     print("=" * 60)
 
     # 1. Naloži

@@ -32,3 +32,4 @@ train:
   max_depth: 8
   learning_rate: 0.05
   subsample: 0.8
+  sample_size: 1000000

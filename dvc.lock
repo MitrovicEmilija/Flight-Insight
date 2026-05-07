@@ -65,8 +65,8 @@ stages:
       size: 1085600689
     - path: src/data/test_data.py
       hash: md5
-      md5: e84dc8c3fed388657045cdcc2beb6b13
-      size: 6312
+      md5: 6654907be6bd641bb4b1cc27fa295ae5
+      size: 6293
     outs:
     - path: data/reference
       hash: md5
@@ -75,7 +75,7 @@ stages:
       nfiles: 1
     - path: reports/drift_report.html
       hash: md5
-      md5: d79c51d2490957582c973062b3a252c1
+      md5: 0f5c19fac34d18ae56a4b4074aca83df
       size: 4830329
   train:
     cmd: uv run python src/model/train.py
@@ -96,12 +96,12 @@ stages:
       nfiles: 34
     - path: src/model/preprocess.py
       hash: md5
-      md5: d41d8cd98f00b204e9800998ecf8427e
-      size: 0
+      md5: b8d9d5bac1b974cab127d9af02549447
+      size: 4769
     - path: src/model/train.py
       hash: md5
-      md5: d41d8cd98f00b204e9800998ecf8427e
-      size: 0
+      md5: f2c782efa5ac6a6eda5275014747f3a8
+      size: 11400
     params:
       params.yaml:
         train:
@@ -112,9 +112,10 @@ stages:
           max_depth: 8
           learning_rate: 0.05
           subsample: 0.8
+          sample_size: 1000000
     outs:
     - path: models
       hash: md5
-      md5: d751713988987e9331980363e24189ce.dir
-      size: 0
-      nfiles: 0
+      md5: f06201af4d57105b527656a8792996c0.dir
+      size: 6026265
+      nfiles: 2
