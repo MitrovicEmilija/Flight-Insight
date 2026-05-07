@@ -2,26 +2,27 @@ import os
 import sys
 import shutil
 
+import yaml
 import pandas as pd
 from evidently import Report
 from evidently.presets import DataDriftPreset, DataSummaryPreset
-
 
 REFERENCE_PATH = "data/preprocessed/flights_reference.csv"
 CURRENT_PATH = "data/preprocessed/flights_current.csv"
 REFERENCE_DIR = "data/reference"
 REPORT_PATH = "reports/drift_report.html"
 
-
 # Stolpci, ki niso primerni za drift detection
 EXCLUDE_COLS = [
-    "FlightDate",       # datumi se naravno spreminjajo
-    "Year",             # konstanten v enem letu
-    "OriginCityName",   # preveč unikatnih vrednosti
-    "DestCityName",     # preveč unikatnih vrednosti
-    "route",            # preveč unikatnih vrednosti
-    "CRSDepTime",       # časi (uporabljamo dep_hour)
-    "CRSArrTime",       # časi
+    "FlightDate",  # datumi se naravno spreminjajo
+    "Year",  # konstanten v eni primerjavi (2024 vs 2025)
+    "Month",  # konstanten po filtriranju (samo januar)
+    "season",  # konstanten po filtriranju (zima)
+    "OriginCityName",  # preveč unikatnih vrednosti
+    "DestCityName",  # preveč unikatnih vrednosti
+    "route",  # preveč unikatnih vrednosti
+    "CRSDepTime",  # časi (uporabljamo dep_hour)
+    "CRSArrTime",  # časi
 ]
 
 
@@ -36,13 +37,37 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     print(f"Nalagam reference: {REFERENCE_PATH}")
     reference = pd.read_csv(REFERENCE_PATH)
-    print(f"  → {len(reference):,} vrstic")
+    print(f"  → {len(reference):,} vrstic (vsi meseci)")
 
     print(f"Nalagam current: {CURRENT_PATH}")
     current = pd.read_csv(CURRENT_PATH)
     print(f"  → {len(current):,} vrstic")
 
     return reference, current
+
+
+def filter_same_month(reference: pd.DataFrame, current: pd.DataFrame):
+    """
+    APPLES-TO-APPLES: filtrira reference na isti mesec kot current.
+
+    Če current vsebuje samo januar, reference filtriramo na januar.
+    Tako primerjamo jan 2024 vs jan 2025, ne celega 2024 vs januar 2025.
+    """
+    if "Month" not in current.columns:
+        print("  OPOZORILO: Month stolpec ne obstaja, primerjam vse")
+        return reference, current
+
+    # Najdi katere mesece vsebuje current
+    current_months = current["Month"].unique().tolist()
+    print(f"\nApples-to-apples filter:")
+    print(f"  Current vsebuje meseci: {current_months}")
+
+    # Filtriraj reference na iste mesece
+    reference_filtered = reference[reference["Month"].isin(current_months)].copy()
+    print(f"  Reference pred filtrom: {len(reference):,} vrstic")
+    print(f"  Reference po filtru:    {len(reference_filtered):,} vrstic (samo meseci {current_months})")
+
+    return reference_filtered, current
 
 
 def prepare_for_drift(df: pd.DataFrame) -> pd.DataFrame:
@@ -71,6 +96,9 @@ def run_drift_report(reference: pd.DataFrame, current: pd.DataFrame) -> dict:
     reference = sample_for_speed(reference)
     current = sample_for_speed(current)
 
+    print(f"  Reference končno: {len(reference):,} vrstic, {len(reference.columns)} stolpcev")
+    print(f"  Current   končno: {len(current):,} vrstic, {len(current.columns)} stolpcev")
+
     print("\nGeneriranje Evidently poročila...")
     report = Report([
         DataSummaryPreset(),
@@ -84,14 +112,13 @@ def run_drift_report(reference: pd.DataFrame, current: pd.DataFrame) -> dict:
     snapshot.save_html(REPORT_PATH)
     print(f"Poročilo shranjeno: {REPORT_PATH}")
 
-    # Vrni dict za analizo
     return snapshot.dict()
 
 
 def analyze_results(result_dict: dict) -> None:
     """Izpiši povzetek rezultatov."""
     print("\n" + "=" * 60)
-    print("DRIFT REPORT POVZETEK")
+    print("DRIFT REPORT POVZETEK (apples-to-apples)")
     print("=" * 60)
 
     tests = result_dict.get("tests", [])
@@ -126,26 +153,34 @@ def update_reference(current_path: str) -> None:
 
 def main():
     print("=" * 60)
-    print("FlightInsight — Drift Detection (Evidently)")
+    print("FlightInsight — Drift Detection (apples-to-apples)")
     print("=" * 60)
 
     # 1. Naloži
     reference, current = load_data()
 
-    # 2. Poženi drift report
+    # 2. Apples-to-apples filter (isti mesec, različni leti)
+    reference, current = filter_same_month(reference, current)
+
+    if len(current) == 0:
+        print("\nNAPAKA: Po filtriranju je current prazen!")
+        sys.exit(0)
+    if len(reference) == 0:
+        print("\nNAPAKA: Po filtriranju je reference prazen!")
+        sys.exit(0)
+
+    # 3. Poženi drift report
     try:
         result_dict = run_drift_report(reference, current)
         analyze_results(result_dict)
     except Exception as e:
         print(f"\nNAPAKA pri generiranju poročila: {e}")
-        # Vseeno nadaljuj — drift failures so OK
         print("(Pipeline nadaljuje, ker so failures pričakovani)")
 
-    # 3. Kopiraj current kot novo referenco za naslednji run
+    # 4. Kopiraj current kot novo referenco za naslednji run
     update_reference(CURRENT_PATH)
 
     # POMEMBNO: vedno exit 0!
-    # Drift detection failures so del normalnega monitoring procesa.
     print("\nDrift detection končana.")
     sys.exit(0)
 

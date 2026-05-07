@@ -1,165 +1,112 @@
 import os
 import sys
+import gc
 
+import yaml
 import numpy as np
 import pandas as pd
-import yaml
+
+# Stolpci, ki jih dejansko rabimo iz BTS CSV (ostalih 90+ ne bere)
+USECOLS = [
+    "Year", "Month", "DayofMonth", "DayOfWeek", "FlightDate",
+    "Marketing_Airline_Network",
+    "Origin", "OriginCityName", "Dest", "DestCityName",
+    "CRSDepTime", "CRSArrTime",
+    "Distance", "CRSElapsedTime",
+    "CarrierDelay", "WeatherDelay", "NASDelay",
+    "SecurityDelay", "LateAircraftDelay",
+    "DepDelayMinutes",
+    "Cancelled", "Diverted",
+]
+
+# Optimizirani dtypes za prihranek pomnilnika
+DTYPES = {
+    "Year": "int16",
+    "Month": "int8",
+    "DayofMonth": "int8",
+    "DayOfWeek": "int8",
+    "Marketing_Airline_Network": "category",
+    "Origin": "category",
+    "OriginCityName": "category",
+    "Dest": "category",
+    "DestCityName": "category",
+    "Cancelled": "float32",
+    "Diverted": "float32",
+}
+
+CHUNK_SIZE = 500_000
 
 
-def load_raw_data(raw_dir: str) -> pd.DataFrame:
-    path = os.path.join(raw_dir, "_combined.csv")
-    if not os.path.exists(path):
-        print(f"ERROR: {path} does not exist. Run fetch_data.py first.")
-        sys.exit(1)
+def process_chunk(chunk: pd.DataFrame, params: dict) -> pd.DataFrame:
+    """Procesiraj en chunk podatkov."""
+    # Strip column names
+    chunk.columns = chunk.columns.str.strip()
 
-    print(f"Reading raw data from {path}")
-    df = pd.read_csv(path, encoding="latin-1", low_memory=False)
-    print(f"  Read {len(df):,} rows, {len(df.columns):,} columns.")
-    return df
+    # Cleaning
+    if params.get("drop_cancelled", True) and "Cancelled" in chunk.columns:
+        chunk = chunk[chunk["Cancelled"] == 0]
 
+    if params.get("drop_diverted", True) and "Diverted" in chunk.columns:
+        chunk = chunk[chunk["Diverted"] == 0]
 
+    if "DepDelayMinutes" in chunk.columns:
+        chunk = chunk.dropna(subset=["DepDelayMinutes"])
 
-def clean_data(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    n_start = len(df)
+    # Drop Cancelled/Diverted po čiščenju (več ne rabimo)
+    cols_to_drop = [c for c in ["Cancelled", "Diverted"] if c in chunk.columns]
+    if cols_to_drop:
+        chunk = chunk.drop(columns=cols_to_drop)
 
-    df.columns = df.columns.str.strip()
+    # Feature engineering
+    if "CRSDepTime" in chunk.columns:
+        chunk["dep_hour"] = (chunk["CRSDepTime"].fillna(0).astype("int16") // 100).clip(0, 23).astype("int8")
 
-    # Remove cancelled flights
-    if params.get("drop_cancelled", True) and "Cancelled" in df.columns:
-        df = df[df["Cancelled"] == 0].copy()
-        print(f"  After dropping Cancelled: {len(df):,} ({n_start - len(df):,} removed)")
-
-    # Remove diverted flights
-    if params.get("drop_diverted", True) and "Diverted" in df.columns:
-        n_before = len(df)
-        df = df[df["Diverted"] == 0].copy()
-        print(f"  After dropping Diverted: {len(df):,} ({n_before - len(df):,} removed)")
-
-    # Remove rows without target variable
-    target = "DepDelayMinutes"
-    if target in df.columns:
-        n_before = len(df)
-        df = df.dropna(subset=[target])
-        print(f"  After removing NaN in {target}: {len(df):,} ({n_before - len(df):,} removed)")
-
-    # Remove duplicates
-    n_before = len(df)
-    df = df.drop_duplicates()
-    if n_before - len(df) > 0:
-        print(f"  Removed {n_before - len(df):,} duplicate rows.")
-
-    return df
-
-
-
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    # Hour of departure from CRSDepTime (format: hhmm)
-    if "CRSDepTime" in df.columns:
-        df["dep_hour"] = (df["CRSDepTime"].fillna(0).astype(int) // 100).clip(0, 23)
-        print("  Added: dep_hour")
-
-    # Part of the day
-    if "dep_hour" in df.columns:
+    if "dep_hour" in chunk.columns:
         conditions = [
-            df["dep_hour"].between(5, 11),
-            df["dep_hour"].between(12, 16),
-            df["dep_hour"].between(17, 20),
+            chunk["dep_hour"].between(5, 11),
+            chunk["dep_hour"].between(12, 16),
+            chunk["dep_hour"].between(17, 20),
         ]
         choices = ["morning", "afternoon", "evening"]
-        df["time_of_day"] = np.select(conditions, choices, default="night")
-        print("  Added: time_of_day")
+        chunk["time_of_day"] = pd.Categorical(
+            np.select(conditions, choices, default="night"),
+            categories=["morning", "afternoon", "evening", "night"]
+        )
 
-    # Weekend
-    if "DayOfWeek" in df.columns:
-        df["is_weekend"] = (df["DayOfWeek"].isin([6, 7])).astype(int)
-        print("  Added: is_weekend")
+    if "DayOfWeek" in chunk.columns:
+        chunk["is_weekend"] = (chunk["DayOfWeek"].isin([6, 7])).astype("int8")
 
-    # Season
-    if "Month" in df.columns:
+    if "Month" in chunk.columns:
         season_map = {
             12: "winter", 1: "winter", 2: "winter",
             3: "spring", 4: "spring", 5: "spring",
             6: "summer", 7: "summer", 8: "summer",
             9: "fall", 10: "fall", 11: "fall",
         }
-        df["season"] = df["Month"].map(season_map)
-        print("  Added: season")
-
-    # Route
-    if "Origin" in df.columns and "Dest" in df.columns:
-        df["route"] = df["Origin"].astype(str) + "-" + df["Dest"].astype(str)
-        print("  Added: route")
-
-    # Distance group
-    if "Distance" in df.columns:
-        df["distance_group"] = pd.cut(
-            df["Distance"],
-            bins=[0, 500, 1000, 2000, float("inf")],
-            labels=["short", "medium", "long", "very_long"]
+        chunk["season"] = pd.Categorical(
+            chunk["Month"].map(season_map),
+            categories=["winter", "spring", "summer", "fall"]
         )
-        print("  Added: distance_group")
 
-    # Delay cause: NaN -> 0 (no delay of that type)
-    delay_causes = [
-        "CarrierDelay", "WeatherDelay", "NASDelay",
-        "SecurityDelay", "LateAircraftDelay"
-    ]
+    if "Origin" in chunk.columns and "Dest" in chunk.columns:
+        # route ne pretvarjamo v category (preveč unikatnih vrednosti)
+        chunk["route"] = chunk["Origin"].astype(str) + "-" + chunk["Dest"].astype(str)
+
+    if "Distance" in chunk.columns:
+        chunk["distance_group"] = pd.cut(
+            chunk["Distance"],
+            bins=[0, 500, 1000, 2000, float("inf")],
+            labels=["short", "medium", "long", "very_long"],
+        )
+
+    # Delay cause: NaN → 0
+    delay_causes = ["CarrierDelay", "WeatherDelay", "NASDelay",
+                    "SecurityDelay", "LateAircraftDelay"]
     for col in delay_causes:
-        if col in df.columns:
-            df[col] = df[col].fillna(0)
-    print("  Filled NaN in delay cause columns")
-    return df
+        if col in chunk.columns:
+            chunk[col] = chunk[col].fillna(0).astype("float32")
 
-
-
-def select_final_columns(df: pd.DataFrame) -> pd.DataFrame:
-    keep_cols = [
-        # Date and time
-        "Year", "Month", "DayofMonth", "DayOfWeek", "FlightDate",
-        # Airline
-        "Marketing_Airline_Network",
-        # Airports
-        "Origin", "OriginCityName", "Dest", "DestCityName",
-        # Arrivals and departures
-        "CRSDepTime", "CRSArrTime",
-        # Distance and duration
-        "Distance", "CRSElapsedTime",
-        # Delay causes
-        "CarrierDelay", "WeatherDelay", "NASDelay",
-        "SecurityDelay", "LateAircraftDelay",
-        # TARGET
-        "DepDelayMinutes",
-        # Engineered features
-        "dep_hour", "time_of_day", "is_weekend", "season",
-        "route", "distance_group",
-    ]
-
-    available = [c for c in keep_cols if c in df.columns]
-    missing = [c for c in keep_cols if c not in df.columns]
-    if missing:
-        print(f"  Missing columns: {missing}")
-
-    df = df[available].copy()
-    print(f"  Selected {len(df.columns)} columns")
-    return df
-
-
-def split_by_year(df: pd.DataFrame, reference_year: int, current_year: int):
-    if "Year" not in df.columns:
-        print("  OPOZORILO: Year stolpec ne obstaja, ne morem narediti split-a")
-        return df, df
-
-    reference = df[df["Year"] == reference_year].copy()
-    current = df[df["Year"] == current_year].copy()
-
-    print(f"  Reference (leto {reference_year}): {len(reference):,} vrstic")
-    print(f"  Current   (leto {current_year}): {len(current):,} vrstic")
-
-    if len(current) == 0:
-        print(f"  OPOZORILO: Ni podatkov za current_year={current_year}!")
-        print("  Preveri, da si v params.yaml dodala mesec za to leto.")
-
-    return reference, current
+    return chunk
 
 
 def main():
@@ -172,48 +119,95 @@ def main():
     reference_year = preprocess_params.get("reference_year", 2024)
     current_year = preprocess_params.get("current_year", 2025)
 
-    # 1. Naloži
-    df = load_raw_data(raw_dir)
-
-    # 2. Čiščenje
-    print("\nČiščenje podatkov:")
-    df = clean_data(df, preprocess_params)
-
-    # 3. Feature engineering
-    print("\nFeature engineering:")
-    df = engineer_features(df)
-
-    # 4. Izberi končne stolpce
-    print("\nIzbira stolpcev:")
-    df = select_final_columns(df)
-
-    # 5. Shrani VSE podatke (oba leta, za trening)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.to_csv(output_path, index=False)
-    print(f"\nShranjeno (vsi podatki, oba leta): {output_path}")
-    print(f"  Vrstic: {len(df):,}, Stolpcev: {len(df.columns)}")
-
-    # 6. Razdeli po LETU za drift detection
-    print(f"\nRazdelitev po letu (reference={reference_year} vs current={current_year}):")
-    reference, current = split_by_year(df, reference_year, current_year)
+    raw_path = os.path.join(raw_dir, "_combined.csv")
+    if not os.path.exists(raw_path):
+        print(f"NAPAKA: {raw_path} ne obstaja!")
+        sys.exit(1)
 
     output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+
     reference_path = os.path.join(output_dir, "flights_reference.csv")
     current_path = os.path.join(output_dir, "flights_current.csv")
 
-    reference.to_csv(reference_path, index=False)
-    current.to_csv(current_path, index=False)
+    # Pobriši stare izhode (pisali bomo append-style)
+    for path in [output_path, reference_path, current_path]:
+        if os.path.exists(path):
+            os.remove(path)
+
+    print(f"Berem v chunkih po {CHUNK_SIZE:,} vrstic iz: {raw_path}")
+    print(f"  Reference year: {reference_year}")
+    print(f"  Current year:   {current_year}")
+    print()
+
+    chunk_iter = pd.read_csv(
+        raw_path,
+        encoding="latin-1",
+        usecols=lambda c: c.strip() in USECOLS,
+        dtype=DTYPES,
+        chunksize=CHUNK_SIZE,
+        low_memory=False,
+    )
+
+    total_rows = 0
+    reference_rows = 0
+    current_rows = 0
+
+    for i, chunk in enumerate(chunk_iter, start=1):
+        n_in = len(chunk)
+
+        # Procesiraj chunk
+        chunk = process_chunk(chunk, preprocess_params)
+        n_out = len(chunk)
+
+        if n_out == 0:
+            print(f"  Chunk {i}: {n_in:,} → 0 (vse filtrirano)")
+            continue
+
+        # Razdeli v 3 datoteke (append mode)
+        # 1. flights.csv (vse)
+        chunk.to_csv(
+            output_path,
+            mode="a",
+            header=(not os.path.exists(output_path) or os.path.getsize(output_path) == 0),
+            index=False,
+        )
+        total_rows += n_out
+
+        # 2. flights_reference.csv (samo reference_year)
+        ref_chunk = chunk[chunk["Year"] == reference_year]
+        if len(ref_chunk) > 0:
+            ref_chunk.to_csv(
+                reference_path,
+                mode="a",
+                header=(not os.path.exists(reference_path) or os.path.getsize(reference_path) == 0),
+                index=False,
+            )
+            reference_rows += len(ref_chunk)
+
+        # 3. flights_current.csv (samo current_year)
+        cur_chunk = chunk[chunk["Year"] == current_year]
+        if len(cur_chunk) > 0:
+            cur_chunk.to_csv(
+                current_path,
+                mode="a",
+                header=(not os.path.exists(current_path) or os.path.getsize(current_path) == 0),
+                index=False,
+            )
+            current_rows += len(cur_chunk)
+
+        print(f"  Chunk {i}: {n_in:,} → {n_out:,} vrstic "
+              f"(ref: {reference_rows:,}, cur: {current_rows:,})")
+
+        # Sprosti pomnilnik
+        del chunk
+        gc.collect()
 
     print(f"\n{'=' * 60}")
-    print(f"Reference ({reference_year}): {reference_path}")
-    print(f"Current   ({current_year}): {current_path}")
-
-    if len(current) > 0:
-        print(f"\nTarget statistika (drift po letu):")
-        print(f"  {reference_year} DepDelayMinutes: mean={reference['DepDelayMinutes'].mean():.2f}, "
-              f"median={reference['DepDelayMinutes'].median():.2f}")
-        print(f"  {current_year} DepDelayMinutes: mean={current['DepDelayMinutes'].mean():.2f}, "
-              f"median={current['DepDelayMinutes'].median():.2f}")
+    print(f"Skupaj obdelanih:    {total_rows:,} vrstic")
+    print(f"Reference ({reference_year}): {reference_rows:,} vrstic → {reference_path}")
+    print(f"Current   ({current_year}): {current_rows:,} vrstic → {current_path}")
+    print(f"Vsi podatki:         {output_path}")
 
 
 if __name__ == "__main__":
