@@ -1,5 +1,9 @@
 name: ML Pipeline
 
+# Triggers:
+#  - push na main → uporabi podatke iz DVC remote
+#  - schedule (1. v mesecu) → fresh BTS download
+#  - workflow_dispatch → ročna sprožitev
 on:
   push:
     branches: [main]
@@ -12,13 +16,19 @@ on:
       - 'gx/expectations/**'
       - '.github/workflows/pipeline.yml'
   workflow_dispatch:
+    inputs:
+      fresh_fetch:
+        description: 'Force fresh BTS download (počasi)'
+        type: boolean
+        required: false
+        default: false
   schedule:
-    - cron: '0 0 1 * *'  # 1. v mesecu ob 00:00 UTC (po objavi novih BTS podatkov)
+    - cron: '0 0 1 * *'  # 1. v mesecu - fresh fetch (po BTS objavah)
 
 jobs:
   ml-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     env:
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
@@ -29,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT_TOKEN }}
-          fetch-depth: 0       # potrebno za git push
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -58,15 +68,35 @@ jobs:
 
       - name: Pull existing data from DVC remote
         run: |
-          uv run dvc pull --force || echo "DVC pull failed (možno prvi run)"
-        continue-on-error: true
+          uv run dvc pull --force
+        continue-on-error: false
 
-      - name: Run DVC pipeline
+      # Pri push triggerju: NE poganjamo fetch (uporabljamo obstoječe podatke iz DagsHub)
+      # Pri schedule/manual fresh_fetch: poženemo celoten pipeline z fetch
+      - name: Run DVC pipeline (without fetch)
+        if: github.event_name == 'push'
         run: |
+          # Skip fetch stage - uporabljamo cached _combined.csv iz dvc pull
+          uv run dvc repro preprocess
+          uv run dvc repro validate
+          uv run dvc repro test_data
+          uv run dvc repro train
+          uv run dvc repro analyze_reviews
+
+      - name: Run DVC pipeline (with fresh fetch)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch == 'true')
+        run: |
+          # Polni pipeline z BTS fetch
           uv run dvc repro
-        env:
-          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+      - name: Run DVC pipeline (default for manual dispatch)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true'
+        run: |
+          uv run dvc repro preprocess
+          uv run dvc repro validate
+          uv run dvc repro test_data
+          uv run dvc repro train
+          uv run dvc repro analyze_reviews
 
       - name: Push data and models to DVC remote
         run: |
