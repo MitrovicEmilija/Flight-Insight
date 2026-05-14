@@ -1,5 +1,7 @@
 .idea/
-/data
-!/data/**/*.dvc
+/data/
+!/data/reviews/
+/data/reviews/*
 !/data/reviews/sample_reviews.csv
+!/data/**/*.dvc
 /models
