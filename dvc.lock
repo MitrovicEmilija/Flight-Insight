@@ -119,3 +119,31 @@ stages:
       md5: f06201af4d57105b527656a8792996c0.dir
       size: 6026265
       nfiles: 2
+  analyze_reviews:
+    cmd: uv run python src/reviews/batch_predict.py
+    deps:
+    - path: data/reviews/sample_reviews.csv
+      hash: md5
+      md5: 71d6d556a0436ff60da7a2dcadc59a42
+      size: 2312
+    - path: src/reviews/analyzer.py
+      hash: md5
+      md5: dff0e278187bc3f9996266d123485e79
+      size: 3988
+    - path: src/reviews/batch_predict.py
+      hash: md5
+      md5: cc4824595943c5311622a7e0243abfd5
+      size: 4678
+    outs:
+    - path: data/reviews/predictions.csv
+      hash: md5
+      md5: 0bdb258db696e84aab4dd58b338c72e1
+      size: 4957
+    - path: reports/sentiment_summary.csv
+      hash: md5
+      md5: b5dc34680ffcae260a060d990ad65d8a
+      size: 599
+    - path: reports/sentiment_summary.png
+      hash: md5
+      md5: 7e89ad1d5f94cbc0463b52150cb4e7b3
+      size: 49631

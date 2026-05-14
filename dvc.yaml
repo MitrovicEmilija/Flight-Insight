@@ -54,3 +54,17 @@ stages:
     outs:
       - models:
           persist: true
+
+  analyze_reviews:
+    cmd: uv run python src/reviews/batch_predict.py
+    deps:
+      - src/reviews/analyzer.py
+      - src/reviews/batch_predict.py
+      - data/reviews/sample_reviews.csv
+    outs:
+      - data/reviews/predictions.csv:
+          persist: true
+      - reports/sentiment_summary.csv:
+          persist: true
+      - reports/sentiment_summary.png:
+          persist: true
