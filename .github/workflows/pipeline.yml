@@ -1,9 +1,9 @@
 name: ML Pipeline
 
 # Triggers:
-#  - push na main → uporabi podatke iz DVC remote
-#  - schedule (1. v mesecu) → fresh BTS download
-#  - workflow_dispatch → ročna sprožitev
+#  - push na main → uporabi podatke iz DVC remote (HITRO ~10 min)
+#  - workflow_dispatch z fresh_fetch=true → polni BTS download (~30 min)
+#  - schedule (1. v mesecu) → polni BTS download
 on:
   push:
     branches: [main]
@@ -18,12 +18,12 @@ on:
   workflow_dispatch:
     inputs:
       fresh_fetch:
-        description: 'Force fresh BTS download (počasi)'
+        description: 'Fresh BTS download (POČASI ~30 min)'
         type: boolean
         required: false
         default: false
   schedule:
-    - cron: '0 0 1 * *'  # 1. v mesecu - fresh fetch (po BTS objavah)
+    - cron: '0 0 1 * *'  # 1. v mesecu
 
 jobs:
   ml-pipeline:
@@ -66,51 +66,64 @@ jobs:
           uv run dvc remote modify origin --local access_key_id ${{ secrets.DAGSHUB_ACCESS_KEY_ID }}
           uv run dvc remote modify origin --local secret_access_key ${{ secrets.DAGSHUB_SECRET_ACCESS_KEY }}
 
-      - name: Pull existing data from DVC remote
+      - name: Pull data from DVC remote
         run: |
           uv run dvc pull --force
         continue-on-error: false
 
-      # Pri push triggerju: NE poganjamo fetch (uporabljamo obstoječe podatke iz DagsHub)
-      # Pri schedule/manual fresh_fetch: poženemo celoten pipeline z fetch
-      - name: Run DVC pipeline (without fetch)
-        if: github.event_name == 'push'
-        run: |
-          # Skip fetch stage - uporabljamo cached _combined.csv iz dvc pull
-          uv run dvc repro preprocess
-          uv run dvc repro validate
-          uv run dvc repro test_data
-          uv run dvc repro train
-          uv run dvc repro analyze_reviews
-
-      - name: Run DVC pipeline (with fresh fetch)
+      # =====================================================
+      # FRESH FETCH MODE: poženi celoten pipeline preko DVC
+      # =====================================================
+      - name: Run full pipeline (fresh fetch)
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch == 'true')
         run: |
-          # Polni pipeline z BTS fetch
           uv run dvc repro
 
-      - name: Run DVC pipeline (default for manual dispatch)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true'
+      # =====================================================
+      # NORMAL MODE: direktno zažene skripte (BREZ fetch)
+      # =====================================================
+      - name: Run preprocessing
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true')
         run: |
-          uv run dvc repro preprocess
-          uv run dvc repro validate
-          uv run dvc repro test_data
-          uv run dvc repro train
-          uv run dvc repro analyze_reviews
+          uv run python src/data/preprocess_data.py
 
+      - name: Run data validation (Great Expectations)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true')
+        run: |
+          cd gx && uv run python run_checkpoint.py
+
+      - name: Run drift detection (Evidently)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true')
+        run: |
+          uv run python src/data/test_data.py
+
+      - name: Run model training
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true')
+        run: |
+          uv run python src/model/train.py
+
+      - name: Run review sentiment analysis
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.fresh_fetch != 'true')
+        run: |
+          uv run python src/reviews/batch_predict.py
+
+      # =====================================================
+      # PUSH RESULTS
+      # =====================================================
       - name: Push data and models to DVC remote
         run: |
           uv run dvc push
 
-      - name: Commit and push DVC lock changes
+      - name: Commit dvc.lock if changed
         run: |
           if [[ -n $(git status -s dvc.lock) ]]; then
             git add dvc.lock
-            git commit -m "ci: update dvc.lock from automated pipeline run"
+            git commit -m "ci: update dvc.lock from automated run"
             git push
           else
             echo "Ni sprememb v dvc.lock"
           fi
+        continue-on-error: true
 
       - name: Upload reports as artifacts
         if: always()
