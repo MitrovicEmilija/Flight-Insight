@@ -1,0 +1,92 @@
+name: ML Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'params.yaml'
+      - 'dvc.yaml'
+      - 'pyproject.toml'
+      - 'gx/checkpoints/**'
+      - 'gx/expectations/**'
+      - '.github/workflows/pipeline.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *'  # 1. v mesecu ob 00:00 UTC (po objavi novih BTS podatkov)
+
+jobs:
+  ml-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          fetch-depth: 0       # potrebno za git push
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pipx install uv
+
+      - name: Set up DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+
+      - name: Install Python dependencies
+        run: |
+          uv sync --frozen
+
+      - name: Configure DVC remote (DagsHub)
+        run: |
+          uv run dvc remote modify origin --local access_key_id ${{ secrets.DAGSHUB_ACCESS_KEY_ID }}
+          uv run dvc remote modify origin --local secret_access_key ${{ secrets.DAGSHUB_SECRET_ACCESS_KEY }}
+
+      - name: Pull existing data from DVC remote
+        run: |
+          uv run dvc pull --force || echo "DVC pull failed (možno prvi run)"
+        continue-on-error: true
+
+      - name: Run DVC pipeline
+        run: |
+          uv run dvc repro
+        env:
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+      - name: Push data and models to DVC remote
+        run: |
+          uv run dvc push
+
+      - name: Commit and push DVC lock changes
+        run: |
+          if [[ -n $(git status -s dvc.lock) ]]; then
+            git add dvc.lock
+            git commit -m "ci: update dvc.lock from automated pipeline run"
+            git push
+          else
+            echo "Ni sprememb v dvc.lock"
+          fi
+
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-reports
+          path: |
+            reports/
+          retention-days: 30
