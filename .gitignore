@@ -1,7 +1,13 @@
 .idea/
-/data/
+
+# Ignoriraj vse v data/ in models/
+/data/**
+/models/**
+
+# Razen DVC kazalcev in sample_reviews.csv
+!/data/
 !/data/reviews/
-/data/reviews/*
 !/data/reviews/sample_reviews.csv
 !/data/**/*.dvc
-/models
+!/models/
+!/models/**/*.dvc
