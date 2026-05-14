@@ -1,3 +1,5 @@
 .idea/
-data
+/data
+!/data/**/*.dvc
+!/data/reviews/sample_reviews.csv
 /models
