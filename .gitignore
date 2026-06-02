@@ -11,3 +11,8 @@
 !/data/**/*.dvc
 !/models/
 !/models/**/*.dvc
+
+!/data/preprocessed/
+/data/preprocessed/*
+!/data/preprocessed/*.dvc
+!/data/preprocessed/.gitignore

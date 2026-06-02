@@ -1,0 +1,122 @@
+name: Docker Build & Push
+
+# Triggers:
+#  - push na main z spremembami v Dockerfile, frontend/, src/ → rebuild slike
+#  - po uspešnem ML pipelinu (workflow_run) → rebuild z najnovejšim modelom
+#  - workflow_dispatch → ročna sprožitev
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.dockerignore'
+      - 'frontend/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/docker-build.yml'
+  workflow_run:
+    workflows: ["ML Pipeline"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions za pushing slik na ghcr.io
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}  # MitrovicEmilija/Flight-Insight
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Če je triggeran iz ML pipelina, samo če je bil uspešen
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pipx install uv
+
+      - name: Set up DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Install dependencies (for DVC pull)
+        run: |
+          uv sync --frozen
+
+      - name: Configure DVC remote
+        run: |
+          uv run dvc remote modify origin --local access_key_id ${{ secrets.DAGSHUB_ACCESS_KEY_ID }}
+          uv run dvc remote modify origin --local secret_access_key ${{ secrets.DAGSHUB_SECRET_ACCESS_KEY }}
+
+      # Potrebujemo modele in podatke v Docker sliki
+      - name: Pull data and models from DVC
+        run: |
+          uv run dvc pull --force
+
+      - name: Verify required files exist
+        run: |
+          echo "Checking required files..."
+          ls -la models/ || echo "Models missing"
+          ls -la reports/ || echo "Reports missing"
+          ls -la data/reviews/ || echo "Reviews missing"
+
+      # Set up Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login na GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Določi metadata (tagi, labels)
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Build in push
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      # Print pull command za uporabnika
+      - name: Display image info
+        run: |
+          echo "Image pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo ""
+          echo "To pull and run locally:"
+          echo "  docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "  docker run -p 8501:8501 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
