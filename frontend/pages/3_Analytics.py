@@ -1,11 +1,8 @@
 """
-Stran 3 — Analytics z zgodovinskimi trendi in statistikami.
+Stran 3 — Analytics z zgodovinskimi trendi.
 
-Pokazuje agregatne podatke za uporabnike:
-  - Najbolj/najmanj zanesljive letalske družbe
-  - Najpogostejše ure zamud
-  - Distribucija zamud
-  - Top letališča
+V Dockerju uporablja flights_sample.csv (500K vrstic).
+Lokalno uporablja flights.csv (~7M vrstic).
 """
 
 import sys
@@ -26,14 +23,21 @@ st.markdown("Analitika zamud na podlagi ~7M letov iz BTS podatkov za 2024.")
 
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_PATH = PROJECT_ROOT / "data" / "preprocessed" / "flights.csv"
+FULL_DATA_PATH = PROJECT_ROOT / "data" / "preprocessed" / "flights.csv"
+SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "preprocessed" / "flights_sample.csv"
 
 
 @st.cache_data
 def load_data():
-    """Naloži vzorec podatkov za analizo (500K vrstic - dovolj za statistike)."""
-    if not DATA_PATH.exists():
-        return None
+    """Naloži podatke. Preferira polni dataset, fallback na sample."""
+    if FULL_DATA_PATH.exists():
+        data_path = FULL_DATA_PATH
+        is_sample = False
+    elif SAMPLE_DATA_PATH.exists():
+        data_path = SAMPLE_DATA_PATH
+        is_sample = True
+    else:
+        return None, None
 
     cols = [
         "Year", "Month", "DayOfWeek",
@@ -44,20 +48,22 @@ def load_data():
         "SecurityDelay", "LateAircraftDelay",
     ]
 
-    df = pd.read_csv(DATA_PATH, usecols=cols, low_memory=False)
-    # Vzorec za hitrost
+    df = pd.read_csv(data_path, usecols=cols, low_memory=False)
     if len(df) > 500_000:
         df = df.sample(n=500_000, random_state=42).reset_index(drop=True)
-    return df
+    return df, is_sample
 
 
-# Load data
 with st.spinner("Nalagam podatke..."):
-    df = load_data()
+    df, is_sample = load_data()
 
 if df is None:
-    st.error("❌ Podatki niso najdeni. Poženi `uv run dvc repro` da generiraš podatke.")
+    st.error("❌ Podatki niso najdeni.")
+    st.info("Poženi `uv run dvc repro` da generiraš podatke ali `uv run python scripts/create_sample.py` za vzorec.")
     st.stop()
+
+if is_sample:
+    st.info(f"ℹ️ Uporabljam vzorec ({len(df):,} vrstic). Za polno analitiko poženi pipeline lokalno.")
 
 # Filtri
 with st.sidebar:
@@ -88,7 +94,7 @@ with col4:
     major_delay_pct = (df_filtered["DepDelayMinutes"] > 60).mean() * 100
     st.metric("% velikih zamud (>60 min)", f"{major_delay_pct:.1f}%")
 
-
+# AIRLINE PERFORMANCE
 st.markdown("---")
 st.subheader("✈️ Zanesljivost po letalskih družbah")
 
@@ -128,9 +134,7 @@ with col2:
     fig.update_layout(showlegend=False, height=400)
     st.plotly_chart(fig, use_container_width=True)
 
-# ====================================================
 # TIME PATTERNS
-# ====================================================
 st.markdown("---")
 st.subheader("🕐 Vzorci po času")
 
@@ -139,10 +143,7 @@ col1, col2 = st.columns(2)
 with col1:
     hour_stats = df_filtered.groupby("dep_hour")["DepDelayMinutes"].mean().reset_index()
     fig = px.line(
-        hour_stats,
-        x="dep_hour",
-        y="DepDelayMinutes",
-        markers=True,
+        hour_stats, x="dep_hour", y="DepDelayMinutes", markers=True,
         title="Povprečna zamuda po uri odhoda",
         labels={"DepDelayMinutes": "Povp. zamuda (min)", "dep_hour": "Ura odhoda"},
     )
@@ -154,18 +155,15 @@ with col2:
     day_stats = df_filtered.groupby("DayOfWeek")["DepDelayMinutes"].mean().reset_index()
     day_stats["Day"] = day_stats["DayOfWeek"].map(day_map)
     fig = px.bar(
-        day_stats,
-        x="Day",
-        y="DepDelayMinutes",
+        day_stats, x="Day", y="DepDelayMinutes",
         title="Povprečna zamuda po dnevu v tednu",
         labels={"DepDelayMinutes": "Povp. zamuda (min)"},
-        color="DepDelayMinutes",
-        color_continuous_scale="RdYlGn_r",
+        color="DepDelayMinutes", color_continuous_scale="RdYlGn_r",
     )
     fig.update_layout(height=350, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
-
+# SEASONAL
 st.markdown("---")
 st.subheader("🗓️ Sezonski vzorci")
 
@@ -174,10 +172,7 @@ col1, col2 = st.columns(2)
 with col1:
     month_stats = df_filtered.groupby("Month")["DepDelayMinutes"].mean().reset_index()
     fig = px.line(
-        month_stats,
-        x="Month",
-        y="DepDelayMinutes",
-        markers=True,
+        month_stats, x="Month", y="DepDelayMinutes", markers=True,
         title="Povprečna zamuda po mesecu",
         labels={"DepDelayMinutes": "Povp. zamuda (min)"},
     )
@@ -191,33 +186,27 @@ with col2:
     season_stats = season_stats.sort_values("season")
 
     fig = px.bar(
-        season_stats,
-        x="season",
-        y="DepDelayMinutes",
+        season_stats, x="season", y="DepDelayMinutes",
         title="Povprečna zamuda po sezoni",
         labels={"DepDelayMinutes": "Povp. zamuda (min)", "season": "Sezona"},
-        color="DepDelayMinutes",
-        color_continuous_scale="RdYlGn_r",
+        color="DepDelayMinutes", color_continuous_scale="RdYlGn_r",
     )
     fig.update_layout(height=350, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
-
+# DELAY CAUSES
 st.markdown("---")
 st.subheader("⚠️ Vzroki zamud")
 
-delay_cols = ["CarrierDelay", "WeatherDelay", "NASDelay",
-              "SecurityDelay", "LateAircraftDelay"]
+delay_cols = ["CarrierDelay", "WeatherDelay", "NASDelay", "SecurityDelay", "LateAircraftDelay"]
 cause_totals = df_filtered[delay_cols].sum().sort_values(ascending=False)
 
 col1, col2 = st.columns(2)
 
 with col1:
     fig = px.pie(
-        values=cause_totals.values,
-        names=cause_totals.index,
-        title="Distribucija vzrokov zamud (skupne minute)",
-        hole=0.4,
+        values=cause_totals.values, names=cause_totals.index,
+        title="Distribucija vzrokov zamud (skupne minute)", hole=0.4,
     )
     fig.update_layout(height=400)
     st.plotly_chart(fig, use_container_width=True)
@@ -225,30 +214,26 @@ with col1:
 with col2:
     st.markdown("**Razlaga vzrokov:**")
     st.markdown("""
-    - **LateAircraftDelay**: kaskadne zamude (prejšnji let zamujal)
-    - **CarrierDelay**: zamuda letalske družbe (vzdrževanje, posadka)
-    - **NASDelay**: nacionalni zračni sistem (preobremenitev)
+    - **LateAircraftDelay**: kaskadne zamude
+    - **CarrierDelay**: zamuda letalske družbe
+    - **NASDelay**: nacionalni zračni sistem
     - **WeatherDelay**: zamude zaradi vremena
-    - **SecurityDelay**: varnostni razlogi (najredkejši)
+    - **SecurityDelay**: varnostni razlogi
     """)
 
-
+# TOP ROUTES
 st.markdown("---")
 st.subheader("🌍 Top rute")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    # Top 10 najpogostejših rut
     route_counts = df_filtered.groupby(["Origin", "Dest"]).size().reset_index(name="n")
     route_counts["route"] = route_counts["Origin"] + " → " + route_counts["Dest"]
     top10 = route_counts.nlargest(10, "n")
 
     fig = px.bar(
-        top10[::-1],
-        x="n",
-        y="route",
-        orientation="h",
+        top10[::-1], x="n", y="route", orientation="h",
         title="Top 10 najpogostejših rut",
         labels={"n": "Št. letov", "route": "Ruta"},
     )
@@ -256,7 +241,6 @@ with col1:
     st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # Rute z največjo zamudo (min 1000 letov)
     route_delays = df_filtered.groupby(["Origin", "Dest"]).agg(
         avg_delay=("DepDelayMinutes", "mean"),
         n=("DepDelayMinutes", "count"),
@@ -266,14 +250,10 @@ with col2:
     worst10 = route_delays.nlargest(10, "avg_delay")
 
     fig = px.bar(
-        worst10[::-1],
-        x="avg_delay",
-        y="route",
-        orientation="h",
+        worst10[::-1], x="avg_delay", y="route", orientation="h",
         title="Top 10 najslabših rut (min 500 letov)",
         labels={"avg_delay": "Povp. zamuda (min)", "route": "Ruta"},
-        color="avg_delay",
-        color_continuous_scale="Reds",
+        color="avg_delay", color_continuous_scale="Reds",
     )
     fig.update_layout(height=400, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)

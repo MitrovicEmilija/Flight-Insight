@@ -1,0 +1,27 @@
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flight-insight:latest
+    container_name: flight-insight-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist monitoring log med restarti containerja
+      - ./data/monitoring:/app/data/monitoring
+      # Optional: mount HuggingFace cache da se model prenese samo enkrat
+      - hf-cache:/app/models/hf_cache
+    environment:
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  hf-cache:
+    name: flight-insight-hf-cache

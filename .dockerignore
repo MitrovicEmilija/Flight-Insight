@@ -1,0 +1,64 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.Python
+*.egg-info
+.pytest_cache
+.coverage
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+Thumbs.db
+
+# DVC
+.dvc/cache
+.dvc/tmp
+.dvc/config.local
+
+# Raw data (preveliko)
+data/raw/
+
+# Polni preprocessed podatki - NE kopiraj v sliko (7 GB!)
+data/preprocessed/flights.csv
+data/preprocessed/flights_reference.csv
+data/preprocessed/flights_current.csv
+
+# Reference
+data/reference/
+
+# Veliki ZIP-i
+*.zip
+
+# Hugging Face cache
+models/hf_cache/
+
+# Logi
+*.log
+data/monitoring/
+
+# Notebooks
+*.ipynb_checkpoints
+gx/uncommitted/
+
+# GitHub
+.github
+
+# Lokalni dokumenti
+*.docx
+*.pdf
+.tar.gz
