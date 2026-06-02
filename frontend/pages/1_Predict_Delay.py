@@ -1,7 +1,6 @@
 """
 Stran 1 — Napoved zamude leta z XGBoost modelom.
-
-Uporabnik vnese parametre leta, sistem napove zamudo v minutah.
+Z dodanim production monitoring (logiranje napovedi).
 """
 
 import sys
@@ -10,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-# Dodaj utils v path
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
 from model_loader import (
     load_xgboost_model,
@@ -18,6 +16,7 @@ from model_loader import (
     load_airlines,
     load_model_metadata,
 )
+from monitoring import log_prediction
 
 
 st.set_page_config(page_title="Predict Delay", page_icon="🛫", layout="wide")
@@ -25,7 +24,6 @@ st.set_page_config(page_title="Predict Delay", page_icon="🛫", layout="wide")
 st.title("🛫 Napoved zamude leta")
 st.markdown("Vnesi podatke o letu in sistem ti napove pričakovano zamudo (XGBoost regresor).")
 
-# Load model
 with st.spinner("Nalagam model..."):
     model = load_xgboost_model()
     metadata = load_model_metadata()
@@ -33,7 +31,6 @@ with st.spinner("Nalagam model..."):
 if model is None:
     st.stop()
 
-# Sidebar — model info
 with st.sidebar:
     st.subheader("ℹ️ Model info")
     if metadata:
@@ -44,11 +41,9 @@ with st.sidebar:
         st.metric("Test RMSE", f"{metrics.get('test_rmse', 0):.2f} min")
         st.metric("Test R²", f"{metrics.get('test_r2', 0):.4f}")
 
-# Pridobi letališča in družbe
 airports = load_airports()
 airlines = load_airlines()
 
-# === FORM ===
 st.markdown("---")
 st.subheader("📋 Podatki o letu")
 
@@ -67,7 +62,6 @@ with col2:
         format_func=lambda x: f"{x} — {airlines[x]}",
         index=0,
     )
-
     st.markdown("**Letališča**")
     origin = st.selectbox("Origin (izvor)", airports, index=airports.index("JFK") if "JFK" in airports else 0)
     dest = st.selectbox("Destination (cilj)", airports, index=airports.index("LAX") if "LAX" in airports else 1)
@@ -77,18 +71,14 @@ with col3:
     distance = st.number_input("Razdalja (milje)", min_value=50, max_value=6000, value=2475, step=50)
     elapsed_time = st.number_input("Načrtovano trajanje (min)", min_value=20, max_value=900, value=380, step=10)
 
-# === PREDICT ===
 st.markdown("---")
 
 if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
-    # Pripravi feature vektor
     month = flight_date.month
     day_of_month = flight_date.day
-    day_of_week = flight_date.isoweekday()  # 1=ponedeljek, 7=nedelja
+    day_of_week = flight_date.isoweekday()
     crs_dep_time = dep_time_str.hour * 100 + dep_time_str.minute
     dep_hour = dep_time_str.hour
-
-    # Engineered features
     is_weekend = 1 if day_of_week in [6, 7] else 0
 
     if 5 <= dep_hour <= 11:
@@ -117,8 +107,7 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
     else:
         distance_group = "very_long"
 
-    # Pripravi DataFrame z istimi stolpci kot je model treniran
-    input_df = pd.DataFrame([{
+    features = {
         "Month": month,
         "DayofMonth": day_of_month,
         "DayOfWeek": day_of_week,
@@ -132,12 +121,28 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
         "distance_group": distance_group,
         "Origin": origin,
         "Dest": dest,
-    }])
+    }
 
-    # Predict
+    input_df = pd.DataFrame([features])
+
     try:
         with st.spinner("Računam napoved..."):
-            prediction = model.predict(input_df)[0]
+            prediction = float(model.predict(input_df)[0])
+
+        # === LOG PREDICTION (production monitoring) ===
+        try:
+            log_prediction(
+                model_type="xgboost_delay",
+                prediction=round(prediction, 2),
+                features=features,
+                extra={
+                    "airline_name": airlines[airline_code],
+                    "flight_date": str(flight_date),
+                    "dep_time": str(dep_time_str),
+                },
+            )
+        except Exception as log_err:
+            st.warning(f"⚠️ Logiranje napovedi neuspešno: {log_err}")
 
         # Display
         st.markdown("---")
@@ -146,11 +151,7 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.metric(
-                "Pričakovana zamuda",
-                f"{prediction:.1f} min",
-                delta=None,
-            )
+            st.metric("Pričakovana zamuda", f"{prediction:.1f} min")
 
         with col2:
             if prediction < 5:
@@ -165,7 +166,6 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
             else:
                 status = "🔴 Velika zamuda"
                 status_color = "red"
-
             st.markdown(f"**Status:** :{status_color}[{status}]")
 
         with col3:
@@ -173,7 +173,6 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
                 mae = metadata.get("metrics", {}).get("test_mae", 0)
                 st.metric("Pričakovana napaka (±)", f"{mae:.1f} min")
 
-        # Detajli
         with st.expander("🔍 Podrobnosti napovedi"):
             st.write(f"**Let:** {airlines[airline_code]} ({airline_code})")
             st.write(f"**Ruta:** {origin} → {dest} ({distance} milj)")
@@ -182,15 +181,13 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
             st.write(f"**Sezona:** {season}")
             st.write(f"**Tip leta:** {distance_group}")
             st.write(f"**Vikend:** {'Da' if is_weekend else 'Ne'}")
+            st.success("📝 Napoved zabeležena v monitoring log.")
 
-        # Interpretacija
         st.info(f"""
         💡 **Kaj to pomeni?**
 
         Napovedana zamuda {prediction:.1f} min temelji na zgodovinskih podatkih
         ~7M letov iz 2024. Pričakovana napaka napovedi je ±{metadata.get('metrics', {}).get('test_mae', 21):.1f} min.
-
-        Napoved upošteva sezono, čas dneva, letalsko družbo, razdaljo in letališča.
         """)
 
     except Exception as e:

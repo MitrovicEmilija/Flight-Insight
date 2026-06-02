@@ -1,5 +1,6 @@
 """
 Stran 2 — Sentiment analiza flight review-a z RoBERTa.
+Z dodanim production monitoring.
 """
 
 import sys
@@ -11,6 +12,7 @@ import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
 from model_loader import load_review_analyzer
+from monitoring import log_prediction
 
 
 st.set_page_config(page_title="Review Sentiment", page_icon="💬", layout="wide")
@@ -18,7 +20,6 @@ st.set_page_config(page_title="Review Sentiment", page_icon="💬", layout="wide
 st.title("💬 Sentiment analiza letalskih komentarjev")
 st.markdown("Vpiši komentar o letu in sistem ti klasificira sentiment (RoBERTa transformer).")
 
-# Load analyzer
 with st.spinner("Nalagam RoBERTa model (lahko traja prvič)..."):
     analyzer = load_review_analyzer()
 
@@ -27,7 +28,6 @@ if analyzer is None:
 
 st.success("✅ Model naložen!")
 
-# Sidebar
 with st.sidebar:
     st.subheader("ℹ️ Model info")
     st.write("**Tip:** RoBERTa (transformer)")
@@ -42,15 +42,12 @@ with st.sidebar:
     Model napove eno od treh kategorij.
     """)
 
-# === INPUT ===
 st.markdown("---")
 st.subheader("📝 Vnesi komentar")
 
-# KLJUČNO: inicializiraj session_state pred kreacijo widget-a
 if "review_input" not in st.session_state:
     st.session_state.review_input = ""
 
-# Helper funkcije za auto-fill - spremenijo session_state
 def set_positive():
     st.session_state.review_input = "Amazing flight! The crew was friendly and we arrived 10 minutes early. Highly recommend!"
 
@@ -60,7 +57,6 @@ def set_neutral():
 def set_negative():
     st.session_state.review_input = "Terrible experience! Flight delayed 3 hours, lost luggage, and rude staff."
 
-# Predloge
 st.markdown("**Predloge za testiranje:**")
 col1, col2, col3 = st.columns(3)
 
@@ -71,8 +67,6 @@ with col2:
 with col3:
     st.button("😠 Negativen primer", use_container_width=True, on_click=set_negative)
 
-# Textarea - SAMO key, brez value!
-# Vrednost se bere/zapisuje direktno v st.session_state.review_input
 review_text = st.text_area(
     "Tvoj komentar:",
     height=100,
@@ -80,7 +74,6 @@ review_text = st.text_area(
     key="review_input",
 )
 
-# === PREDICT ===
 if st.button("🔮 Analiziraj sentiment", type="primary", use_container_width=True):
     if not review_text.strip():
         st.warning("⚠️ Prosim vnesi komentar.")
@@ -88,7 +81,20 @@ if st.button("🔮 Analiziraj sentiment", type="primary", use_container_width=Tr
         with st.spinner("Analiziram..."):
             result = analyzer.predict(review_text)
 
-        # Display
+        # === LOG PREDICTION ===
+        try:
+            log_prediction(
+                model_type="roberta_sentiment",
+                prediction=result["label"],
+                features={"text": review_text[:200]},  # samo 200 znakov
+                extra={
+                    "confidence": round(result["score"], 4),
+                    "scores": {k: round(v, 4) for k, v in result["scores"].items()},
+                },
+            )
+        except Exception as log_err:
+            st.warning(f"⚠️ Logiranje neuspešno: {log_err}")
+
         st.markdown("---")
         st.subheader("📊 Rezultat")
 
@@ -118,9 +124,7 @@ if st.button("🔮 Analiziraj sentiment", type="primary", use_container_width=Tr
                     x=list(scores.values()),
                     y=list(scores.keys()),
                     orientation="h",
-                    marker=dict(
-                        color=["#dc3545", "#6c757d", "#28a745"],
-                    ),
+                    marker=dict(color=["#dc3545", "#6c757d", "#28a745"]),
                     text=[f"{v * 100:.1f}%" for v in scores.values()],
                     textposition="outside",
                 )
@@ -135,7 +139,9 @@ if st.button("🔮 Analiziraj sentiment", type="primary", use_container_width=Tr
             )
             st.plotly_chart(fig, use_container_width=True)
 
-# === BATCH ANALIZA (predogled) ===
+        st.success("📝 Napoved zabeležena v monitoring log.")
+
+# Batch analiza
 st.markdown("---")
 st.subheader("📈 Predogled batch analize")
 st.markdown("Rezultati iz `data/reviews/predictions.csv` (predhodno analiziranih 30 komentarjev):")
