@@ -24,7 +24,7 @@ from styling import (
 
 
 st.set_page_config(
-    page_title="FlightInsight",
+    page_title="Flight Insight",
     page_icon=":material/flight_takeoff:",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -47,7 +47,7 @@ def capability_card(icon: str, title: str, desc: str, tag: str) -> str:
 
 def main():
     page_header(
-        "FlightInsight",
+        "Flight Insight",
         "Inteligentni sistem za napovedovanje in analizo zamud letov",
         icon="flight_takeoff",
     )

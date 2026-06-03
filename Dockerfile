@@ -42,4 +42,4 @@ ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_THEME_BASE=light
 
-CMD ["streamlit", "run", "frontend/app.py"]
+CMD ["streamlit", "run", "frontend/Home.py"]
