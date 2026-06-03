@@ -1,0 +1,27 @@
+[theme]
+base = "light"
+
+# Core palette
+primaryColor = "#2B59FF"            # signal blue — interactive elements, accents
+backgroundColor = "#F7F8FA"         # app canvas (cool off-white)
+secondaryBackgroundColor = "#FFFFFF" # cards / widgets / sidebar surfaces
+textColor = "#0F1419"               # ink
+linkColor = "#2B59FF"
+
+# Borders & radius
+borderColor = "#E3E7ED"
+baseRadius = "0.65rem"
+showSidebarBorder = true
+
+# Typography — Inter, loaded straight from Google Fonts
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+headingFontWeights = [800, 700, 600]
+baseFontSize = 15
+
+# Chart series colors (Plotly / Altair / Vega pick these up automatically)
+chartCategoricalColors = ["#2B59FF", "#11845B", "#B7791F", "#C0362C", "#6C5CE7", "#0E7C86", "#9B5DE5", "#5B6573"]
+chartSequentialColors = ["#EAF0FF", "#C3D3FF", "#90ACFF", "#5C82F7", "#2B59FF", "#1B3FB0", "#122A78"]
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"

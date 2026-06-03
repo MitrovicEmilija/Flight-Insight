@@ -11,15 +11,28 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
+from styling import (
+    apply_base_styles,
+    page_header,
+    section_title,
+    divider,
+    theme_fig,
+    SEQ_BLUE,
+    SEQ_DELAY,
+    ACCENT,
+)
 
 
-st.set_page_config(page_title="Analytics", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Analytics", page_icon=":material/monitoring:", layout="wide")
+apply_base_styles()
 
-st.title("📊 Analytics — zgodovinski trendi")
-st.markdown("Analitika zamud na podlagi ~7M letov iz BTS podatkov za 2024.")
+page_header(
+    "Analytics — zgodovinski trendi",
+    "Analitika zamud na podlagi ~7M letov iz BTS podatkov za 2024.",
+    icon="monitoring",
+)
 
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -58,16 +71,16 @@ with st.spinner("Nalagam podatke..."):
     df, is_sample = load_data()
 
 if df is None:
-    st.error("❌ Podatki niso najdeni.")
+    st.error("Podatki niso najdeni.")
     st.info("Poženi `uv run dvc repro` da generiraš podatke ali `uv run python scripts/create_sample.py` za vzorec.")
     st.stop()
 
 if is_sample:
-    st.info(f"ℹ️ Uporabljam vzorec ({len(df):,} vrstic). Za polno analitiko poženi pipeline lokalno.")
+    st.info(f"Uporabljam vzorec ({len(df):,} vrstic). Za polno analitiko poženi pipeline lokalno.")
 
 # Filtri
 with st.sidebar:
-    st.subheader("🔍 Filtri")
+    section_title("Filtri", icon="filter_alt")
     year_filter = st.selectbox(
         "Leto",
         options=sorted(df["Year"].unique()),
@@ -77,8 +90,7 @@ with st.sidebar:
     st.caption(f"Filtriranih {len(df_filtered):,} letov")
 
 # Splošne metrike
-st.markdown("---")
-st.subheader("📈 Splošne metrike")
+section_title("Splošne metrike", icon="query_stats")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -95,8 +107,8 @@ with col4:
     st.metric("% velikih zamud (>60 min)", f"{major_delay_pct:.1f}%")
 
 # AIRLINE PERFORMANCE
-st.markdown("---")
-st.subheader("✈️ Zanesljivost po letalskih družbah")
+divider()
+section_title("Zanesljivost po letalskih družbah", icon="flight")
 
 airline_stats = df_filtered.groupby("Marketing_Airline_Network").agg(
     avg_delay=("DepDelayMinutes", "mean"),
@@ -114,12 +126,12 @@ with col1:
         x="Marketing_Airline_Network",
         y="avg_delay",
         color="avg_delay",
-        color_continuous_scale="RdYlGn_r",
+        color_continuous_scale=SEQ_DELAY,
         title="Povprečna zamuda po družbi",
         labels={"avg_delay": "Povprečna zamuda (min)", "Marketing_Airline_Network": "Letalska družba"},
     )
-    fig.update_layout(showlegend=False, height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_coloraxes(showscale=False)
+    st.plotly_chart(theme_fig(fig, height=400, legend=False), use_container_width=True)
 
 with col2:
     fig = px.bar(
@@ -127,16 +139,16 @@ with col2:
         x="Marketing_Airline_Network",
         y="on_time_pct",
         color="on_time_pct",
-        color_continuous_scale="RdYlGn",
+        color_continuous_scale=SEQ_BLUE,
         title="% pravočasnih letov po družbi",
         labels={"on_time_pct": "% pravočasnih", "Marketing_Airline_Network": "Letalska družba"},
     )
-    fig.update_layout(showlegend=False, height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_coloraxes(showscale=False)
+    st.plotly_chart(theme_fig(fig, height=400, legend=False), use_container_width=True)
 
 # TIME PATTERNS
-st.markdown("---")
-st.subheader("🕐 Vzorci po času")
+divider()
+section_title("Vzorci po času", icon="schedule")
 
 col1, col2 = st.columns(2)
 
@@ -147,8 +159,8 @@ with col1:
         title="Povprečna zamuda po uri odhoda",
         labels={"DepDelayMinutes": "Povp. zamuda (min)", "dep_hour": "Ura odhoda"},
     )
-    fig.update_layout(height=350)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(line=dict(color=ACCENT, width=2.5), marker=dict(color=ACCENT, size=7))
+    st.plotly_chart(theme_fig(fig, height=350, legend=False), use_container_width=True)
 
 with col2:
     day_map = {1: "Pon", 2: "Tor", 3: "Sre", 4: "Čet", 5: "Pet", 6: "Sob", 7: "Ned"}
@@ -158,14 +170,14 @@ with col2:
         day_stats, x="Day", y="DepDelayMinutes",
         title="Povprečna zamuda po dnevu v tednu",
         labels={"DepDelayMinutes": "Povp. zamuda (min)"},
-        color="DepDelayMinutes", color_continuous_scale="RdYlGn_r",
+        color="DepDelayMinutes", color_continuous_scale=SEQ_DELAY,
     )
-    fig.update_layout(height=350, showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_coloraxes(showscale=False)
+    st.plotly_chart(theme_fig(fig, height=350, legend=False), use_container_width=True)
 
 # SEASONAL
-st.markdown("---")
-st.subheader("🗓️ Sezonski vzorci")
+divider()
+section_title("Sezonski vzorci", icon="calendar_month")
 
 col1, col2 = st.columns(2)
 
@@ -176,8 +188,8 @@ with col1:
         title="Povprečna zamuda po mesecu",
         labels={"DepDelayMinutes": "Povp. zamuda (min)"},
     )
-    fig.update_layout(height=350)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(line=dict(color=ACCENT, width=2.5), marker=dict(color=ACCENT, size=7))
+    st.plotly_chart(theme_fig(fig, height=350, legend=False), use_container_width=True)
 
 with col2:
     season_stats = df_filtered.groupby("season")["DepDelayMinutes"].mean().reset_index()
@@ -189,14 +201,14 @@ with col2:
         season_stats, x="season", y="DepDelayMinutes",
         title="Povprečna zamuda po sezoni",
         labels={"DepDelayMinutes": "Povp. zamuda (min)", "season": "Sezona"},
-        color="DepDelayMinutes", color_continuous_scale="RdYlGn_r",
+        color="DepDelayMinutes", color_continuous_scale=SEQ_DELAY,
     )
-    fig.update_layout(height=350, showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_coloraxes(showscale=False)
+    st.plotly_chart(theme_fig(fig, height=350, legend=False), use_container_width=True)
 
 # DELAY CAUSES
-st.markdown("---")
-st.subheader("⚠️ Vzroki zamud")
+divider()
+section_title("Vzroki zamud", icon="warning")
 
 delay_cols = ["CarrierDelay", "WeatherDelay", "NASDelay", "SecurityDelay", "LateAircraftDelay"]
 cause_totals = df_filtered[delay_cols].sum().sort_values(ascending=False)
@@ -206,24 +218,24 @@ col1, col2 = st.columns(2)
 with col1:
     fig = px.pie(
         values=cause_totals.values, names=cause_totals.index,
-        title="Distribucija vzrokov zamud (skupne minute)", hole=0.4,
+        title="Distribucija vzrokov zamud (skupne minute)", hole=0.55,
     )
-    fig.update_layout(height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(marker=dict(line=dict(color="#FFFFFF", width=2)))
+    st.plotly_chart(theme_fig(fig, height=400), use_container_width=True)
 
 with col2:
     st.markdown("**Razlaga vzrokov:**")
     st.markdown("""
-    - **LateAircraftDelay**: kaskadne zamude
-    - **CarrierDelay**: zamuda letalske družbe
-    - **NASDelay**: nacionalni zračni sistem
-    - **WeatherDelay**: zamude zaradi vremena
-    - **SecurityDelay**: varnostni razlogi
+    - **LateAircraftDelay** — kaskadne zamude
+    - **CarrierDelay** — zamuda letalske družbe
+    - **NASDelay** — nacionalni zračni sistem
+    - **WeatherDelay** — zamude zaradi vremena
+    - **SecurityDelay** — varnostni razlogi
     """)
 
 # TOP ROUTES
-st.markdown("---")
-st.subheader("🌍 Top rute")
+divider()
+section_title("Top rute", icon="route")
 
 col1, col2 = st.columns(2)
 
@@ -237,8 +249,8 @@ with col1:
         title="Top 10 najpogostejših rut",
         labels={"n": "Št. letov", "route": "Ruta"},
     )
-    fig.update_layout(height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(marker_color=ACCENT)
+    st.plotly_chart(theme_fig(fig, height=400, legend=False), use_container_width=True)
 
 with col2:
     route_delays = df_filtered.groupby(["Origin", "Dest"]).agg(
@@ -253,7 +265,7 @@ with col2:
         worst10[::-1], x="avg_delay", y="route", orientation="h",
         title="Top 10 najslabših rut (min 500 letov)",
         labels={"avg_delay": "Povp. zamuda (min)", "route": "Ruta"},
-        color="avg_delay", color_continuous_scale="Reds",
+        color="avg_delay", color_continuous_scale=SEQ_DELAY,
     )
-    fig.update_layout(height=400, showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_coloraxes(showscale=False)
+    st.plotly_chart(theme_fig(fig, height=400, legend=False), use_container_width=True)

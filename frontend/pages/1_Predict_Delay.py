@@ -17,12 +17,23 @@ from model_loader import (
     load_model_metadata,
 )
 from monitoring import log_prediction
+from styling import (
+    apply_base_styles,
+    page_header,
+    section_title,
+    divider,
+    status_pill,
+)
 
 
-st.set_page_config(page_title="Predict Delay", page_icon="🛫", layout="wide")
+st.set_page_config(page_title="Predict Delay", page_icon=":material/schedule:", layout="wide")
+apply_base_styles()
 
-st.title("🛫 Napoved zamude leta")
-st.markdown("Vnesi podatke o letu in sistem ti napove pričakovano zamudo (XGBoost regresor).")
+page_header(
+    "Napoved zamude leta",
+    "Vnesi podatke o letu in sistem napove pričakovano zamudo (XGBoost regresor).",
+    icon="schedule",
+)
 
 with st.spinner("Nalagam model..."):
     model = load_xgboost_model()
@@ -32,7 +43,7 @@ if model is None:
     st.stop()
 
 with st.sidebar:
-    st.subheader("ℹ️ Model info")
+    section_title("Model info", icon="info")
     if metadata:
         st.write(f"**Tip:** {metadata.get('model_type', 'N/A')}")
         st.write(f"**Features:** {metadata.get('n_features', 'N/A')}")
@@ -44,8 +55,7 @@ with st.sidebar:
 airports = load_airports()
 airlines = load_airlines()
 
-st.markdown("---")
-st.subheader("📋 Podatki o letu")
+section_title("Podatki o letu", icon="edit_note")
 
 col1, col2, col3 = st.columns(3)
 
@@ -71,9 +81,9 @@ with col3:
     distance = st.number_input("Razdalja (milje)", min_value=50, max_value=6000, value=2475, step=50)
     elapsed_time = st.number_input("Načrtovano trajanje (min)", min_value=20, max_value=900, value=380, step=10)
 
-st.markdown("---")
+divider()
 
-if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
+if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":material/insights:"):
     month = flight_date.month
     day_of_month = flight_date.day
     day_of_week = flight_date.isoweekday()
@@ -142,11 +152,11 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
                 },
             )
         except Exception as log_err:
-            st.warning(f"⚠️ Logiranje napovedi neuspešno: {log_err}")
+            st.warning(f"Logiranje napovedi neuspešno: {log_err}")
 
         # Display
-        st.markdown("---")
-        st.subheader("📊 Rezultat napovedi")
+        divider()
+        section_title("Rezultat napovedi", icon="analytics")
 
         col1, col2, col3 = st.columns(3)
 
@@ -155,25 +165,25 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
 
         with col2:
             if prediction < 5:
-                status = "✅ Pravočasno"
-                status_color = "green"
+                pill = status_pill("Pravočasno", "green")
             elif prediction < 15:
-                status = "🟡 Manjša zamuda"
-                status_color = "orange"
+                pill = status_pill("Manjša zamuda", "amber")
             elif prediction < 30:
-                status = "🟠 Srednja zamuda"
-                status_color = "orange"
+                pill = status_pill("Srednja zamuda", "orange")
             else:
-                status = "🔴 Velika zamuda"
-                status_color = "red"
-            st.markdown(f"**Status:** :{status_color}[{status}]")
+                pill = status_pill("Velika zamuda", "red")
+            st.markdown(
+                f'<div class="fi-eyebrow">Status</div>'
+                f'<div style="margin-top:.5rem;">{pill}</div>',
+                unsafe_allow_html=True,
+            )
 
         with col3:
             if metadata:
                 mae = metadata.get("metrics", {}).get("test_mae", 0)
                 st.metric("Pričakovana napaka (±)", f"{mae:.1f} min")
 
-        with st.expander("🔍 Podrobnosti napovedi"):
+        with st.expander("Podrobnosti napovedi"):
             st.write(f"**Let:** {airlines[airline_code]} ({airline_code})")
             st.write(f"**Ruta:** {origin} → {dest} ({distance} milj)")
             st.write(f"**Čas:** {flight_date} ob {dep_time_str}")
@@ -181,15 +191,15 @@ if st.button("🔮 Napovej zamudo", type="primary", use_container_width=True):
             st.write(f"**Sezona:** {season}")
             st.write(f"**Tip leta:** {distance_group}")
             st.write(f"**Vikend:** {'Da' if is_weekend else 'Ne'}")
-            st.success("📝 Napoved zabeležena v monitoring log.")
+            st.caption("Napoved zabeležena v monitoring log.")
 
         st.info(f"""
-        💡 **Kaj to pomeni?**
+        **Kaj to pomeni?**
 
         Napovedana zamuda {prediction:.1f} min temelji na zgodovinskih podatkih
         ~7M letov iz 2024. Pričakovana napaka napovedi je ±{metadata.get('metrics', {}).get('test_mae', 21):.1f} min.
         """)
 
     except Exception as e:
-        st.error(f"❌ Napaka pri napovedi: {e}")
+        st.error(f"Napaka pri napovedi: {e}")
         st.exception(e)
