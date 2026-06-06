@@ -1,10 +1,3 @@
-"""
-FlightInsight — Model loading utilities.
-
-Naloži XGBoost pipeline in HuggingFace ReviewAnalyzer.
-Uporablja Streamlit cache za hitro ponovno nalaganje.
-"""
-
 import os
 import sys
 from pathlib import Path
@@ -13,7 +6,7 @@ import joblib
 import streamlit as st
 
 
-# Dodaj root projekta v PYTHONPATH (za importe iz src/)
+# Dodaj root projekta v PYTHONPATH
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -31,8 +24,6 @@ def load_xgboost_model():
         return None
 
     try:
-        # Importiraj custom razred PREDEN naložimo model
-        # Joblib potrebuje ta import da prepozna HighCardinalityEncoder
         from preprocess import HighCardinalityEncoder  # noqa: F401
 
         pipeline = joblib.load(model_path)

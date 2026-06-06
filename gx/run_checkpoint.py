@@ -1,17 +1,3 @@
-"""
-FlightInsight — Great Expectations checkpoint runner.
-
-Pipeline ga pokliče iz dvc.yaml stage 'validate':
-  cd gx && uv run python run_checkpoint.py
-
-Validira data/preprocessed/flights.csv proti flights_suite,
-ustvari HTML poročilo v gx/uncommitted/data_docs/.
-
-Exit code:
-  0 - uspeh ALI predhodno obstoječ checkpoint failed (drift je pričakovan)
-  1 - kritična napaka (suite ne obstaja, podatki manjkajo)
-"""
-
 import sys
 
 import great_expectations as gx
@@ -22,7 +8,7 @@ def main():
     print("Great Expectations validation")
     print("=" * 60)
 
-    # Pridobi context (poženemo iz mape gx/)
+    # Pridobi context
     context = gx.get_context()
 
     # Preveri da checkpoint obstaja
@@ -62,8 +48,6 @@ def main():
 
     print(f"\nData Docs: gx/uncommitted/data_docs/local_site/index.html")
 
-    # Vrni 0 — pipeline gre naprej tudi če je validacija failed,
-    # ker je drift pričakovan v monitoring pipelines
     sys.exit(0)
 
 

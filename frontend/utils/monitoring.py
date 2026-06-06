@@ -1,13 +1,3 @@
-"""
-FlightInsight — Production monitoring.
-
-Logira vsako napoved v CSV za kasnejšo analizo.
-Lokacija: data/monitoring/predictions_log.csv
-
-Polja:
-  timestamp, model_type, prediction, features (kot JSON)
-"""
-
 import json
 from datetime import datetime
 from pathlib import Path
@@ -27,15 +17,7 @@ def log_prediction(
     features: dict,
     extra: dict = None,
 ) -> None:
-    """
-    Logiraj eno napoved v CSV.
-
-    Args:
-        model_type: "xgboost_delay" ali "roberta_sentiment"
-        prediction: napovedna vrednost (število ali kategorija)
-        features: vhodne značilnosti kot dict
-        extra: dodatni podatki (npr. confidence score)
-    """
+    # Logiraj eno napoved v CSV.
     MONITORING_DIR.mkdir(parents=True, exist_ok=True)
 
     row = {

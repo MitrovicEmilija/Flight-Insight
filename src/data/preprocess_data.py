@@ -6,7 +6,7 @@ import yaml
 import numpy as np
 import pandas as pd
 
-# Stolpci, ki jih dejansko rabimo iz BTS CSV (ostalih 90+ ne bere)
+# Stolpci, ki jih dejansko rabimo iz BTS CSV
 USECOLS = [
     "Year", "Month", "DayofMonth", "DayOfWeek", "FlightDate",
     "Marketing_Airline_Network",
@@ -19,7 +19,6 @@ USECOLS = [
     "Cancelled", "Diverted",
 ]
 
-# Optimizirani dtypes za prihranek pomnilnika
 DTYPES = {
     "Year": "int16",
     "Month": "int8",

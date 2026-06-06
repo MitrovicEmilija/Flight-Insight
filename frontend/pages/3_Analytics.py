@@ -1,10 +1,3 @@
-"""
-Stran 3 — Analytics z zgodovinskimi trendi.
-
-V Dockerju uporablja flights_sample.csv (500K vrstic).
-Lokalno uporablja flights.csv (~7M vrstic).
-"""
-
 import sys
 from pathlib import Path
 

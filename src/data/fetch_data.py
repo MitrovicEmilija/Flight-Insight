@@ -1,14 +1,3 @@
-"""
-FlightInsight — Inkrementalni prenos BTS Marketing Carrier podatkov.
-
-Strategija:
-  1. Preveri kateri (year, month) pari so ŽE v obstoječem _combined.csv
-  2. Iz params.yaml `year_months` izberi SAMO manjkajoče
-  3. Prenesi samo manjkajoče → pripni k obstoječemu _combined.csv
-
-Tako se v cloud-u (GitHub Actions) prenese samo nov mesec, ne celega leta.
-"""
-
 import os
 import sys
 import glob

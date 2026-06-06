@@ -14,15 +14,15 @@ REPORT_PATH = "reports/drift_report.html"
 
 # Stolpci, ki niso primerni za drift detection
 EXCLUDE_COLS = [
-    "FlightDate",  # datumi se naravno spreminjajo
-    "Year",  # konstanten v eni primerjavi (2024 vs 2025)
-    "Month",  # konstanten po filtriranju (samo januar)
-    "season",  # konstanten po filtriranju (zima)
-    "OriginCityName",  # preveč unikatnih vrednosti
-    "DestCityName",  # preveč unikatnih vrednosti
-    "route",  # preveč unikatnih vrednosti
-    "CRSDepTime",  # časi (uporabljamo dep_hour)
-    "CRSArrTime",  # časi
+    "FlightDate",
+    "Year",
+    "Month",
+    "season",
+    "OriginCityName",
+    "DestCityName",
+    "route",
+    "CRSDepTime",
+    "CRSArrTime",
 ]
 
 
@@ -47,12 +47,6 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def filter_same_month(reference: pd.DataFrame, current: pd.DataFrame):
-    """
-    APPLES-TO-APPLES: filtrira reference na isti mesec kot current.
-
-    Če current vsebuje samo januar, reference filtriramo na januar.
-    Tako primerjamo jan 2024 vs jan 2025, ne celega 2024 vs januar 2025.
-    """
     if "Month" not in current.columns:
         print("  OPOZORILO: Month stolpec ne obstaja, primerjam vse")
         return reference, current
@@ -156,10 +150,8 @@ def main():
     print("FlightInsight — Drift Detection")
     print("=" * 60)
 
-    # 1. Naloži
     reference, current = load_data()
 
-    # 2. Apples-to-apples filter (isti mesec, različni leti)
     reference, current = filter_same_month(reference, current)
 
     if len(current) == 0:
@@ -169,7 +161,7 @@ def main():
         print("\nNAPAKA: Po filtriranju je reference prazen!")
         sys.exit(0)
 
-    # 3. Poženi drift report
+    # Poženi drift report
     try:
         result_dict = run_drift_report(reference, current)
         analyze_results(result_dict)
@@ -177,10 +169,9 @@ def main():
         print(f"\nNAPAKA pri generiranju poročila: {e}")
         print("(Pipeline nadaljuje, ker so failures pričakovani)")
 
-    # 4. Kopiraj current kot novo referenco za naslednji run
+    # Kopiraj current kot novo referenco za naslednji run
     update_reference(CURRENT_PATH)
 
-    # POMEMBNO: vedno exit 0!
     print("\nDrift detection končana.")
     sys.exit(0)
 

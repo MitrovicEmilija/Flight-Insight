@@ -1,7 +1,3 @@
-"""
-Stran 4 — Admin nadzorna plošča (z Live Monitoring tab-om).
-"""
-
 import sys
 from pathlib import Path
 

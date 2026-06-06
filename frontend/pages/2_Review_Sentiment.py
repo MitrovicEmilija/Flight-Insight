@@ -1,8 +1,3 @@
-"""
-Stran 2 — Sentiment analiza flight review-a z RoBERTa.
-Z dodanim production monitoring.
-"""
-
 import sys
 from pathlib import Path
 

@@ -1,24 +1,8 @@
-"""
-FlightInsight — skupni stilski modul.
-
-Centralizira ves izgled aplikacije:
-- apply_base_styles()  -> injecta CSS (kliči ENKRAT na vrhu vsake strani)
-- page_header(...)     -> editorial naslov strani z ikono
-- section_title(...)   -> podnaslov sekcije s tanko črto
-- theme_fig(fig)       -> poenoten Plotly izgled za vse grafe
-- barvne konstante     -> INK, MUTED, ACCENT, semantične barve, lestvice
-
-Uporaba ikon: Material Symbols (https://fonts.google.com/icons).
-"""
-
 from __future__ import annotations
 
 import streamlit as st
 
 
-# ----------------------------------------------------------------------------
-# Barvni tokeni (uporabljaj te povsod namesto hardcodanih hex vrednosti)
-# ----------------------------------------------------------------------------
 ACCENT = "#2B59FF"
 ACCENT_SOFT = "#EAF0FF"
 INK = "#0F1419"

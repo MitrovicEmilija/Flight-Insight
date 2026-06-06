@@ -1,8 +1,3 @@
-"""
-Stran 1 — Napoved zamude leta z XGBoost modelom.
-Z dodanim production monitoring (logiranje napovedi).
-"""
-
 import sys
 from pathlib import Path
 

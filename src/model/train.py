@@ -1,21 +1,3 @@
-"""
-FlightInsight — Trening XGBoost modela.
-
-Procesna veriga:
-  1. Naloži flights.csv
-  2. Pripravi X, y (features + target)
-  3. Train/test split
-  4. Sklearn Pipeline: ColumnTransformer + XGBRegressor
-  5. Trening z early stopping
-  6. Evalvacija (MAE, RMSE, R²)
-  7. XGBoost feature importance (gain, weight, cover)
-  8. MLflow tracking (parametri, metrike, artefakti)
-  9. Shrani model + pipeline
-
-MLflow tracking gre na DagsHub (https://dagshub.com/<user>/<repo>.mlflow).
-Za auth potrebuješ env vars MLFLOW_TRACKING_USERNAME in MLFLOW_TRACKING_PASSWORD.
-"""
-
 import os
 import sys
 import warnings
@@ -168,12 +150,6 @@ def evaluate(pipeline: Pipeline, X_test, y_test) -> tuple[dict, np.ndarray]:
 
 
 def feature_importance_analysis(pipeline: Pipeline, X_sample: pd.DataFrame) -> tuple[str, str]:
-    """
-    XGBoost native feature importance analiza.
-    Generira 2 grafa:
-      - bar plot top 20 features (po gain)
-      - primerjava gain vs weight vs cover
-    """
     print("\nFeature importance analiza...")
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -184,10 +160,9 @@ def feature_importance_analysis(pipeline: Pipeline, X_sample: pd.DataFrame) -> t
     # Pridobi feature names po preprocessing-u
     feature_names = get_feature_names(preprocessor, X_sample)
 
-    # XGBoost ima 3 vrste importance:
-    # - gain: povprečni dobiček (informacijski) ko je feature uporabljen v razdelitvi
-    # - weight: kolikokrat je feature uporabljen v drevesih
-    # - cover: povprečno število primerov ki gredo skozi razdelitve s tem feature-jem
+    # gain: povprečni dobiček (informacijski) ko je feature uporabljen v razdelitvi
+    # weight: kolikokrat je feature uporabljen v drevesih
+    # cover: povprečno število primerov ki gredo skozi razdelitve s tem feature-jem
     importance_types = ["gain", "weight", "cover"]
     importances = {}
 
@@ -299,7 +274,7 @@ def main():
     # 2. Naloži in razdeli podatke
     X_train, X_test, y_train, y_test = load_and_split(train_params)
 
-    # 3. Trening v MLflow run kontekstu
+    # 3. Trening v MLflow
     if use_mlflow:
         mlflow.start_run(run_name="xgboost_baseline")
         mlflow.log_params(train_params)

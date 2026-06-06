@@ -1,7 +1,3 @@
-"""
-FlightInsight — Sklearn pipeline utilities za trening modela.
-"""
-
 import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -59,7 +55,6 @@ TARGET = "DepDelayMinutes"
 class HighCardinalityEncoder(BaseEstimator, TransformerMixin):
     """
     Label encoder za stolpce z veliko unikatnih vrednosti (Origin, Dest).
-    Mapira string → int. Neznane vrednosti dobijo poseben indeks.
     """
 
     def __init__(self):
