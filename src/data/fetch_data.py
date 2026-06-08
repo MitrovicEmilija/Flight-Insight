@@ -1,6 +1,5 @@
 import os
 import sys
-import glob
 import time
 import zipfile
 
@@ -44,10 +43,10 @@ def download_bts_month(year: int, month: int, raw_dir: str) -> str | None:
     zip_path = os.path.join(raw_dir, zip_filename)
 
     if os.path.exists(zip_path):
-        print(f"  ✓ {zip_filename} že obstaja lokalno, preskočim prenos")
+        print(f"{zip_filename} že obstaja lokalno, preskočim prenos")
         return zip_path
 
-    print(f"  ⬇ Prenašam: {zip_filename}", end=" ", flush=True)
+    print(f"Prenašam: {zip_filename}", end=" ", flush=True)
     try:
         response = requests.get(url, stream=True, timeout=180, verify=False)
         response.raise_for_status()
@@ -60,11 +59,11 @@ def download_bts_month(year: int, month: int, raw_dir: str) -> str | None:
                     downloaded += len(chunk)
 
         size_mb = downloaded / 1024 / 1024
-        print(f"→ {size_mb:.1f} MB")
+        print(f"{size_mb:.1f} MB")
         return zip_path
 
     except requests.exceptions.RequestException as e:
-        print(f"→ NAPAKA: {e}")
+        print(f"NAPAKA: {e}")
         if os.path.exists(zip_path):
             os.remove(zip_path)
         return None
@@ -132,7 +131,7 @@ def main():
     print(f"Manjkajočih za prenos:     {len(missing)}")
 
     if not missing:
-        print("\n✓ Nič novega za prenesti! Vsi meseci so že v _combined.csv")
+        print("\nNič novega za prenesti! Vsi meseci so že v _combined.csv")
         return
 
     print("-" * 60)

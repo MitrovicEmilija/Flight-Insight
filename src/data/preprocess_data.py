@@ -8,15 +8,28 @@ import pandas as pd
 
 # Stolpci, ki jih dejansko rabimo iz BTS CSV
 USECOLS = [
-    "Year", "Month", "DayofMonth", "DayOfWeek", "FlightDate",
+    "Year",
+    "Month",
+    "DayofMonth",
+    "DayOfWeek",
+    "FlightDate",
     "Marketing_Airline_Network",
-    "Origin", "OriginCityName", "Dest", "DestCityName",
-    "CRSDepTime", "CRSArrTime",
-    "Distance", "CRSElapsedTime",
-    "CarrierDelay", "WeatherDelay", "NASDelay",
-    "SecurityDelay", "LateAircraftDelay",
+    "Origin",
+    "OriginCityName",
+    "Dest",
+    "DestCityName",
+    "CRSDepTime",
+    "CRSArrTime",
+    "Distance",
+    "CRSElapsedTime",
+    "CarrierDelay",
+    "WeatherDelay",
+    "NASDelay",
+    "SecurityDelay",
+    "LateAircraftDelay",
     "DepDelayMinutes",
-    "Cancelled", "Diverted",
+    "Cancelled",
+    "Diverted",
 ]
 
 DTYPES = {
@@ -58,7 +71,11 @@ def process_chunk(chunk: pd.DataFrame, params: dict) -> pd.DataFrame:
 
     # Feature engineering
     if "CRSDepTime" in chunk.columns:
-        chunk["dep_hour"] = (chunk["CRSDepTime"].fillna(0).astype("int16") // 100).clip(0, 23).astype("int8")
+        chunk["dep_hour"] = (
+            (chunk["CRSDepTime"].fillna(0).astype("int16") // 100)
+            .clip(0, 23)
+            .astype("int8")
+        )
 
     if "dep_hour" in chunk.columns:
         conditions = [
@@ -69,7 +86,7 @@ def process_chunk(chunk: pd.DataFrame, params: dict) -> pd.DataFrame:
         choices = ["morning", "afternoon", "evening"]
         chunk["time_of_day"] = pd.Categorical(
             np.select(conditions, choices, default="night"),
-            categories=["morning", "afternoon", "evening", "night"]
+            categories=["morning", "afternoon", "evening", "night"],
         )
 
     if "DayOfWeek" in chunk.columns:
@@ -77,14 +94,22 @@ def process_chunk(chunk: pd.DataFrame, params: dict) -> pd.DataFrame:
 
     if "Month" in chunk.columns:
         season_map = {
-            12: "winter", 1: "winter", 2: "winter",
-            3: "spring", 4: "spring", 5: "spring",
-            6: "summer", 7: "summer", 8: "summer",
-            9: "fall", 10: "fall", 11: "fall",
+            12: "winter",
+            1: "winter",
+            2: "winter",
+            3: "spring",
+            4: "spring",
+            5: "spring",
+            6: "summer",
+            7: "summer",
+            8: "summer",
+            9: "fall",
+            10: "fall",
+            11: "fall",
         }
         chunk["season"] = pd.Categorical(
             chunk["Month"].map(season_map),
-            categories=["winter", "spring", "summer", "fall"]
+            categories=["winter", "spring", "summer", "fall"],
         )
 
     if "Origin" in chunk.columns and "Dest" in chunk.columns:
@@ -99,8 +124,13 @@ def process_chunk(chunk: pd.DataFrame, params: dict) -> pd.DataFrame:
         )
 
     # Delay cause: NaN → 0
-    delay_causes = ["CarrierDelay", "WeatherDelay", "NASDelay",
-                    "SecurityDelay", "LateAircraftDelay"]
+    delay_causes = [
+        "CarrierDelay",
+        "WeatherDelay",
+        "NASDelay",
+        "SecurityDelay",
+        "LateAircraftDelay",
+    ]
     for col in delay_causes:
         if col in chunk.columns:
             chunk[col] = chunk[col].fillna(0).astype("float32")
@@ -129,7 +159,6 @@ def main():
     reference_path = os.path.join(output_dir, "flights_reference.csv")
     current_path = os.path.join(output_dir, "flights_current.csv")
 
-    # Pobriši stare izhode (pisali bomo append-style)
     for path in [output_path, reference_path, current_path]:
         if os.path.exists(path):
             os.remove(path)
@@ -163,12 +192,14 @@ def main():
             print(f"  Chunk {i}: {n_in:,} → 0 (vse filtrirano)")
             continue
 
-        # Razdeli v 3 datoteke (append mode)
+        # Razdeli v 3 datoteke
         # 1. flights.csv (vse)
         chunk.to_csv(
             output_path,
             mode="a",
-            header=(not os.path.exists(output_path) or os.path.getsize(output_path) == 0),
+            header=(
+                not os.path.exists(output_path) or os.path.getsize(output_path) == 0
+            ),
             index=False,
         )
         total_rows += n_out
@@ -179,7 +210,10 @@ def main():
             ref_chunk.to_csv(
                 reference_path,
                 mode="a",
-                header=(not os.path.exists(reference_path) or os.path.getsize(reference_path) == 0),
+                header=(
+                    not os.path.exists(reference_path)
+                    or os.path.getsize(reference_path) == 0
+                ),
                 index=False,
             )
             reference_rows += len(ref_chunk)
@@ -190,13 +224,18 @@ def main():
             cur_chunk.to_csv(
                 current_path,
                 mode="a",
-                header=(not os.path.exists(current_path) or os.path.getsize(current_path) == 0),
+                header=(
+                    not os.path.exists(current_path)
+                    or os.path.getsize(current_path) == 0
+                ),
                 index=False,
             )
             current_rows += len(cur_chunk)
 
-        print(f"  Chunk {i}: {n_in:,} → {n_out:,} vrstic "
-              f"(ref: {reference_rows:,}, cur: {current_rows:,})")
+        print(
+            f"  Chunk {i}: {n_in:,} → {n_out:,} vrstic "
+            f"(ref: {reference_rows:,}, cur: {current_rows:,})"
+        )
 
         # Sprosti pomnilnik
         del chunk

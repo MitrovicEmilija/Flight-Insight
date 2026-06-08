@@ -1,9 +1,9 @@
-import os
 import sys
 from pathlib import Path
 
 import joblib
 import streamlit as st
+import pandas as pd
 
 
 # Dodaj root projekta v PYTHONPATH
@@ -24,8 +24,6 @@ def load_xgboost_model():
         return None
 
     try:
-        from preprocess import HighCardinalityEncoder  # noqa: F401
-
         pipeline = joblib.load(model_path)
         return pipeline
     except ImportError as e:
@@ -43,6 +41,7 @@ def load_review_analyzer():
     """Naloži HuggingFace ReviewAnalyzer. Cached da se model prenese samo enkrat."""
     try:
         from src.reviews.analyzer import ReviewAnalyzer
+
         analyzer = ReviewAnalyzer()
         return analyzer
     except Exception as e:
@@ -54,6 +53,7 @@ def load_review_analyzer():
 def load_model_metadata():
     """Naloži metadata.yaml o XGBoost modelu."""
     import yaml
+
     metadata_path = PROJECT_ROOT / "models" / "metadata.yaml"
     if not metadata_path.exists():
         return None
@@ -61,21 +61,100 @@ def load_model_metadata():
         return yaml.safe_load(f)
 
 
+FALLBACK_AIRPORTS = {
+    "ATL": "Atlanta, GA",
+    "LAX": "Los Angeles, CA",
+    "ORD": "Chicago, IL",
+    "DFW": "Dallas-Fort Worth, TX",
+    "DEN": "Denver, CO",
+    "JFK": "New York, NY",
+    "SFO": "San Francisco, CA",
+    "LAS": "Las Vegas, NV",
+    "SEA": "Seattle, WA",
+    "MCO": "Orlando, FL",
+    "EWR": "Newark, NJ",
+    "MIA": "Miami, FL",
+    "BOS": "Boston, MA",
+    "PHX": "Phoenix, AZ",
+    "IAH": "Houston, TX",
+    "MSP": "Minneapolis, MN",
+    "DTW": "Detroit, MI",
+    "LGA": "New York, NY",
+    "PHL": "Philadelphia, PA",
+    "FLL": "Fort Lauderdale, FL",
+    "BWI": "Baltimore, MD",
+    "DCA": "Washington, DC",
+    "IAD": "Washington, DC",
+    "MDW": "Chicago, IL",
+    "SAN": "San Diego, CA",
+    "TPA": "Tampa, FL",
+    "PDX": "Portland, OR",
+    "SLC": "Salt Lake City, UT",
+    "STL": "St. Louis, MO",
+    "HNL": "Honolulu, HI",
+    "ANC": "Anchorage, AK",
+    "AUS": "Austin, TX",
+    "BNA": "Nashville, TN",
+    "CLT": "Charlotte, NC",
+    "RDU": "Raleigh-Durham, NC",
+    "PIT": "Pittsburgh, PA",
+    "CLE": "Cleveland, OH",
+    "MCI": "Kansas City, MO",
+    "MEM": "Memphis, TN",
+    "OAK": "Oakland, CA",
+    "SJC": "San Jose, CA",
+    "SMF": "Sacramento, CA",
+    "ABQ": "Albuquerque, NM",
+}
+
+
 @st.cache_data
 def load_airports():
-    """Naloži seznam unikatnih letališč iz preprocessed podatkov."""
-    import pandas as pd
-    data_path = PROJECT_ROOT / "data" / "preprocessed" / "flights.csv"
-    if not data_path.exists():
-        return ["ATL", "LAX", "ORD", "DFW", "DEN", "JFK", "SFO", "LAS", "SEA", "MCO",
-                "EWR", "MIA", "BOS", "PHX", "IAH", "MSP", "DTW", "LGA", "PHL", "FLL"]
 
-    try:
-        df = pd.read_csv(data_path, usecols=["Origin", "Dest"], nrows=100_000)
-        airports = sorted(set(df["Origin"].unique()) | set(df["Dest"].unique()))
-        return airports
-    except Exception:
-        return ["ATL", "LAX", "ORD", "DFW", "DEN", "JFK", "SFO", "LAS"]
+    candidates = [
+        PROJECT_ROOT / "data" / "preprocessed" / "flights_sample.csv",
+        PROJECT_ROOT / "data" / "preprocessed" / "flights.csv",
+    ]
+
+    for data_path in candidates:
+        if not data_path.exists():
+            continue
+        try:
+            cols = ["Origin", "OriginCityName", "Dest", "DestCityName"]
+            df = pd.read_csv(data_path, usecols=cols, nrows=200_000, low_memory=False)
+
+            # Origin mapping
+            origin_map = (
+                df[["Origin", "OriginCityName"]]
+                .dropna()
+                .drop_duplicates(subset=["Origin"])
+                .set_index("Origin")["OriginCityName"]
+                .to_dict()
+            )
+            # Dest mapping
+            dest_map = (
+                df[["Dest", "DestCityName"]]
+                .dropna()
+                .drop_duplicates(subset=["Dest"])
+                .set_index("Dest")["DestCityName"]
+                .to_dict()
+            )
+
+            combined = {**dest_map, **origin_map}
+
+            if len(combined) > 10:
+                return dict(sorted(combined.items()))
+        except Exception:
+            continue
+
+    return FALLBACK_AIRPORTS
+
+
+def format_airport(code, airports_dict):
+    city = airports_dict.get(code, "")
+    if city:
+        return f"{code} — {city}"
+    return code
 
 
 @st.cache_data

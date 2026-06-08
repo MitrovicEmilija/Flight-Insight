@@ -1,22 +1,23 @@
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import os
 import logging
 from pathlib import Path
+
 import torch
 import numpy as np
 
+torch.set_num_threads(2)
+torch.set_num_interop_threads(1)
+
 logging.getLogger("transformers").setLevel(logging.ERROR)
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class ReviewAnalyzer:
     DEFAULT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-    LABEL_MAP = {
-        0: "negative",
-        1: "neutral",
-        2: "positive"
-    }
+    LABEL_MAP = {0: "negative", 1: "neutral", 2: "positive"}
 
     def __init__(self, model_name: str = None, cache_dir: str = "models/hf_cache"):
         self.model_name = model_name or self.DEFAULT_MODEL
@@ -31,16 +32,30 @@ class ReviewAnalyzer:
             cache_dir=str(self.cache_dir),
         )
 
-        # 2. Model (use_safetensors=True za PyTorch <2.6 kompatibilnost)
+        # 2. Model
         self.model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name,
             cache_dir=str(self.cache_dir),
             use_safetensors=True,
         )
-        self.model.eval()
 
+        self.model.eval()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model.to(self.device)
+
+        try:
+            with torch.no_grad():
+                warmup_input = self.tokenizer(
+                    "warmup",
+                    return_tensors="pt",
+                    truncation=True,
+                    padding=True,
+                    max_length=512,
+                ).to(self.device)
+                _ = self.model(**warmup_input)
+        except Exception as e:
+            print(f"  Warmup warning: {e}")
+
         print(f"  Model nalozen na {self.device}")
 
     def predict(self, text: str) -> dict:
@@ -48,8 +63,10 @@ class ReviewAnalyzer:
             return {
                 "label": "neutral",
                 "score": 1.0,
-                "scores": {"negative": 0.0, "neutral": 1.0, "positive": 0.0}
+                "scores": {"negative": 0.0, "neutral": 1.0, "positive": 0.0},
             }
+
+        text = text[:1000]
 
         inputs = self.tokenizer(
             text,
@@ -72,7 +89,7 @@ class ReviewAnalyzer:
             "scores": {
                 self.LABEL_MAP[i]: float(probs_np[i])
                 for i in range(len(self.LABEL_MAP))
-            }
+            },
         }
 
     def predict_batch(self, texts: list[str], batch_size: int = 16) -> list[dict]:
@@ -95,21 +112,24 @@ class ReviewAnalyzer:
 
             for j, prob in enumerate(probs_np):
                 predicted_idx = int(np.argmax(prob))
-                results.append({
-                    "label": self.LABEL_MAP[predicted_idx],
-                    "score": float(prob[predicted_idx]),
-                    "scores": {
-                        self.LABEL_MAP[k]: float(prob[k])
-                        for k in range(len(self.LABEL_MAP))
+                results.append(
+                    {
+                        "label": self.LABEL_MAP[predicted_idx],
+                        "score": float(prob[predicted_idx]),
+                        "scores": {
+                            self.LABEL_MAP[k]: float(prob[k])
+                            for k in range(len(self.LABEL_MAP))
+                        },
                     }
-                })
+                )
 
         return results
 
 
 if __name__ == "__main__":
-    analyzer = ReviewAnalyzer()
+    import time
 
+    analyzer = ReviewAnalyzer()
     test_reviews = [
         "Flight was delayed 3 hours, terrible experience.",
         "Average flight, nothing special.",
@@ -119,9 +139,10 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Test napovedi:")
     print("=" * 60)
-
     for review in test_reviews:
+        t0 = time.time()
         result = analyzer.predict(review)
+        elapsed = time.time() - t0
         print(f"\nText: {review}")
         print(f"  Label: {result['label']} (score: {result['score']:.3f})")
-        print(f"  Scores: {result['scores']}")
+        print(f"  Time:  {elapsed:.3f} sek")

@@ -1,4 +1,6 @@
 import sys
+import time
+import traceback
 from pathlib import Path
 
 import pandas as pd
@@ -6,9 +8,9 @@ import streamlit as st
 import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
-from model_loader import load_review_analyzer
-from monitoring import log_prediction
-from styling import (
+from model_loader import load_review_analyzer  # type: ignore
+from monitoring import log_prediction  # type: ignore
+from styling import (  # type: ignore
     apply_base_styles,
     page_header,
     section_title,
@@ -21,7 +23,9 @@ from styling import (
 )
 
 
-st.set_page_config(page_title="Review Sentiment", page_icon=":material/reviews:", layout="wide")
+st.set_page_config(
+    page_title="Review Sentiment", page_icon=":material/reviews:", layout="wide"
+)
 apply_base_styles()
 
 page_header(
@@ -30,11 +34,25 @@ page_header(
     icon="reviews",
 )
 
-with st.spinner("Nalagam RoBERTa model (lahko traja prvič)..."):
-    analyzer = load_review_analyzer()
+# === LOAD MODEL WITH STATUS ===
+status_placeholder = st.empty()
+
+with status_placeholder.container():
+    with st.spinner("Nalagam RoBERTa model (lahko traja prvič)..."):
+        try:
+            analyzer = load_review_analyzer()
+        except Exception as e:
+            st.error(f"Napaka pri nalaganju modela: {e}")
+            st.exception(e)
+            st.stop()
 
 if analyzer is None:
+    status_placeholder.error("Model se ni naložil. Ponovno odpri stran.")
     st.stop()
+
+status_placeholder.success("Model pripravljen.")
+time.sleep(0.5)
+status_placeholder.empty()
 
 with st.sidebar:
     section_title("Model info", icon="info")
@@ -55,55 +73,120 @@ section_title("Vnesi komentar", icon="rate_review")
 if "review_input" not in st.session_state:
     st.session_state.review_input = ""
 
+
 def set_positive():
     st.session_state.review_input = "Amazing flight! The crew was friendly and we arrived 10 minutes early. Highly recommend!"
 
+
 def set_neutral():
-    st.session_state.review_input = "Average flight. Nothing special but no major issues either."
+    st.session_state.review_input = (
+        "Average flight. Nothing special but no major issues either."
+    )
+
 
 def set_negative():
-    st.session_state.review_input = "Terrible experience! Flight delayed 3 hours, lost luggage, and rude staff."
+    st.session_state.review_input = (
+        "Terrible experience! Flight delayed 3 hours, lost luggage, and rude staff."
+    )
+
 
 st.markdown("**Predloge za testiranje:**")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.button("Pozitiven primer", use_container_width=True, on_click=set_positive,
-              icon=":material/sentiment_satisfied:")
+    st.button(
+        "Pozitiven primer",
+        use_container_width=True,
+        on_click=set_positive,
+        icon=":material/sentiment_satisfied:",
+    )
 with col2:
-    st.button("Nevtralen primer", use_container_width=True, on_click=set_neutral,
-              icon=":material/sentiment_neutral:")
+    st.button(
+        "Nevtralen primer",
+        use_container_width=True,
+        on_click=set_neutral,
+        icon=":material/sentiment_neutral:",
+    )
 with col3:
-    st.button("Negativen primer", use_container_width=True, on_click=set_negative,
-              icon=":material/sentiment_dissatisfied:")
+    st.button(
+        "Negativen primer",
+        use_container_width=True,
+        on_click=set_negative,
+        icon=":material/sentiment_dissatisfied:",
+    )
 
 review_text = st.text_area(
     "Tvoj komentar:",
     height=100,
     placeholder="Type your review here in English...",
     key="review_input",
+    max_chars=500,  # OMEJI DOLŽINO da preprečimo dolge inference time-e
 )
 
-if st.button("Analiziraj sentiment", type="primary", use_container_width=True, icon=":material/insights:"):
+# Pokaži dolžino besedila kot user feedback
+char_count = len(review_text) if review_text else 0
+st.caption(f"Znakov: {char_count}/500")
+
+if st.button(
+    "Analiziraj sentiment",
+    type="primary",
+    use_container_width=True,
+    icon=":material/insights:",
+):
     if not review_text.strip():
         st.warning("Prosim vnesi komentar.")
+    elif len(review_text) > 500:
+        st.error("Besedilo je predolgo (max 500 znakov).")
     else:
-        with st.spinner("Analiziram..."):
-            result = analyzer.predict(review_text)
+        # === ANALIZA Z DETAILJNIMI ČASI ===
+        result = None
+        progress_placeholder = st.empty()
+        error_placeholder = st.empty()
 
-        # === LOG PREDICTION ===
+        try:
+            progress_placeholder.info("Začenjam analizo...")
+            start_time = time.time()
+
+            # Truncate text for safety
+            text_to_analyze = review_text[:500].strip()
+
+            progress_placeholder.info(
+                f"Pošiljam {len(text_to_analyze)} znakov v model..."
+            )
+
+            result = analyzer.predict(text_to_analyze)
+            elapsed = time.time() - start_time
+
+            progress_placeholder.empty()
+
+            if result is None:
+                st.error("Model je vrnil None - to ne bi smelo biti mogoče.")
+                st.stop()
+
+            if "label" not in result or "score" not in result:
+                st.error(f"Neveljaven rezultat: {result}")
+                st.stop()
+
+        except Exception as e:
+            progress_placeholder.empty()
+            st.error(f"Napaka pri analizi: {type(e).__name__}: {e}")
+            with st.expander("Tehnične podrobnosti"):
+                st.code(traceback.format_exc())
+            st.stop()
+
         try:
             log_prediction(
                 model_type="roberta_sentiment",
                 prediction=result["label"],
-                features={"text": review_text[:200]},  # samo 200 znakov
+                features={"text": review_text[:200]},
                 extra={
                     "confidence": round(result["score"], 4),
                     "scores": {k: round(v, 4) for k, v in result["scores"].items()},
+                    "inference_time_sec": round(elapsed, 3),
                 },
             )
         except Exception as log_err:
-            st.warning(f"Logiranje neuspešno: {log_err}")
+            st.warning(f"Logiranje neuspešno (analiza vseeno uspešna): {log_err}")
 
         divider()
         section_title("Rezultat", icon="analytics")
@@ -124,7 +207,7 @@ if st.button("Analiziraj sentiment", type="primary", use_container_width=True, i
                 <div class="fi-card">
                   <div style="display:flex;align-items:center;gap:.5rem;">
                     <span class="material-symbols-outlined" style="color:{color};font-size:30px;">
-                      {icon_map.get(label, 'help')}
+                      {icon_map.get(label, "help")}
                     </span>
                     <span style="font-size:1.3rem;font-weight:800;color:{color};">
                       {label.upper()}
@@ -139,31 +222,39 @@ if st.button("Analiziraj sentiment", type="primary", use_container_width=True, i
         with col2:
             scores = result["scores"]
             bar_colors = [SENTIMENT_COLORS.get(k, MUTED) for k in scores.keys()]
-            fig = go.Figure(data=[
-                go.Bar(
-                    x=list(scores.values()),
-                    y=list(scores.keys()),
-                    orientation="h",
-                    marker=dict(color=bar_colors),
-                    text=[f"{v * 100:.1f}%" for v in scores.values()],
-                    textposition="outside",
-                )
-            ])
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=list(scores.values()),
+                        y=list(scores.keys()),
+                        orientation="h",
+                        marker=dict(color=bar_colors),
+                        text=[f"{v * 100:.1f}%" for v in scores.values()],
+                        textposition="outside",
+                    )
+                ]
+            )
             fig.update_layout(
                 title="Verjetnost po kategoriji",
                 xaxis_title="Verjetnost",
                 xaxis=dict(range=[0, 1.1]),
             )
-            st.plotly_chart(theme_fig(fig, height=300, legend=False), use_container_width=True)
+            st.plotly_chart(
+                theme_fig(fig, height=300, legend=False), use_container_width=True
+            )
 
         st.caption("Napoved zabeležena v monitoring log.")
 
 # Batch analiza
 divider()
-section_title("Predogled batch analize", icon="dataset")
-st.markdown("Rezultati iz `data/reviews/predictions.csv` (predhodno analiziranih 30 komentarjev):")
+section_title("Vpogled batch analize", icon="dataset")
+st.markdown(
+    "Rezultati iz `data/reviews/predictions.csv` (predhodno analiziranih 30 komentarjev):"
+)
 
-predictions_path = Path(__file__).parent.parent.parent / "data" / "reviews" / "predictions.csv"
+predictions_path = (
+    Path(__file__).parent.parent.parent / "data" / "reviews" / "predictions.csv"
+)
 if predictions_path.exists():
     df = pd.read_csv(predictions_path)
 
@@ -172,42 +263,57 @@ if predictions_path.exists():
     with col1:
         sentiment_counts = df["sentiment"].value_counts().to_dict()
         pie_colors = [SENTIMENT_COLORS.get(k, MUTED) for k in sentiment_counts.keys()]
-        fig = go.Figure(data=[
-            go.Pie(
-                labels=list(sentiment_counts.keys()),
-                values=list(sentiment_counts.values()),
-                hole=0.55,
-                marker=dict(colors=pie_colors, line=dict(color="#FFFFFF", width=2)),
-            )
-        ])
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=list(sentiment_counts.keys()),
+                    values=list(sentiment_counts.values()),
+                    hole=0.55,
+                    marker=dict(colors=pie_colors, line=dict(color="#FFFFFF", width=2)),
+                )
+            ]
+        )
         fig.update_layout(title="Distribucija sentiment")
         st.plotly_chart(theme_fig(fig, height=350), use_container_width=True)
 
     with col2:
-        summary_path = Path(__file__).parent.parent.parent / "reports" / "sentiment_summary.csv"
+        summary_path = (
+            Path(__file__).parent.parent.parent / "reports" / "sentiment_summary.csv"
+        )
         if summary_path.exists():
             summary = pd.read_csv(summary_path)
-            fig = go.Figure(data=[
-                go.Bar(
-                    x=summary["sentiment_score"],
-                    y=summary["airline"],
-                    orientation="h",
-                    marker=dict(
-                        color=[SUCCESS if s > 0 else DANGER for s in summary["sentiment_score"]],
-                    ),
-                )
-            ])
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=summary["sentiment_score"],
+                        y=summary["airline"],
+                        orientation="h",
+                        marker=dict(
+                            color=[
+                                SUCCESS if s > 0 else DANGER
+                                for s in summary["sentiment_score"]
+                            ],
+                        ),
+                    )
+                ]
+            )
             fig.update_layout(
                 title="Sentiment score po družbi",
                 xaxis_title="Score (-1 do +1)",
             )
-            st.plotly_chart(theme_fig(fig, height=350, legend=False), use_container_width=True)
+            st.plotly_chart(
+                theme_fig(fig, height=350, legend=False), use_container_width=True
+            )
 
     with st.expander("Vsi analizirani komentarji"):
         st.dataframe(
-            df[["airline", "text", "sentiment", "confidence"]].sort_values("confidence", ascending=False),
+            df[["airline", "text", "sentiment", "confidence"]].sort_values(
+                "confidence", ascending=False
+            ),
             use_container_width=True,
             hide_index=True,
         )
 else:
-    st.info("Batch rezultati niso na voljo. Najprej poženi: `uv run dvc repro analyze_reviews`")
+    st.info(
+        "Batch rezultati niso na voljo. Najprej poženi: `uv run dvc repro analyze_reviews`"
+    )

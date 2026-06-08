@@ -8,7 +8,7 @@ import pandas as pd
 import joblib
 import matplotlib
 
-matplotlib.use("Agg")  # ne odpiraj GUI
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
@@ -60,12 +60,16 @@ def load_and_split(params: dict) -> tuple:
     if "Year" in df.columns:
         n_before = len(df)
         df = df[df["Year"] == 2024].copy()
-        print(f"  Filtrirano na 2024: {len(df):,} (odstranjenih {n_before - len(df):,})")
+        print(
+            f"  Filtrirano na 2024: {len(df):,} (odstranjenih {n_before - len(df):,})"
+        )
 
     # Vzorec za RAM
     sample_size = params.get("sample_size", None)
     if sample_size and len(df) > sample_size:
-        df = df.sample(n=sample_size, random_state=params["random_state"]).reset_index(drop=True)
+        df = df.sample(n=sample_size, random_state=params["random_state"]).reset_index(
+            drop=True
+        )
         print(f"  Vzorec za trening: {len(df):,}")
 
     # Features in target
@@ -74,7 +78,8 @@ def load_and_split(params: dict) -> tuple:
 
     # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
+        X,
+        y,
         test_size=params["test_size"],
         random_state=params["random_state"],
     )
@@ -100,10 +105,12 @@ def train_model(X_train, y_train, params: dict) -> Pipeline:
         n_jobs=-1,
     )
 
-    pipeline = Pipeline([
-        ("preprocessor", preprocessor),
-        ("xgboost", model),
-    ])
+    pipeline = Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            ("xgboost", model),
+        ]
+    )
 
     print("Učenje modela...")
     # Za early stopping potrebujemo eval_set, zato preprocesiramo ročno
@@ -115,7 +122,8 @@ def train_model(X_train, y_train, params: dict) -> Pipeline:
     y_train_p, y_val = y_train.iloc[:-n_val], y_train.iloc[-n_val:]
 
     model.fit(
-        X_train_p, y_train_p,
+        X_train_p,
+        y_train_p,
         eval_set=[(X_val_p, y_val)],
         verbose=False,
     )
@@ -149,7 +157,9 @@ def evaluate(pipeline: Pipeline, X_test, y_test) -> tuple[dict, np.ndarray]:
     return metrics, y_pred
 
 
-def feature_importance_analysis(pipeline: Pipeline, X_sample: pd.DataFrame) -> tuple[str, str]:
+def feature_importance_analysis(
+    pipeline: Pipeline, X_sample: pd.DataFrame
+) -> tuple[str, str]:
     print("\nFeature importance analiza...")
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -187,7 +197,9 @@ def feature_importance_analysis(pipeline: Pipeline, X_sample: pd.DataFrame) -> t
     plt.barh(range(len(top_features)), top_values[::-1], color="steelblue")
     plt.yticks(range(len(top_features)), top_features[::-1])
     plt.xlabel("Importance (gain)")
-    plt.title("Top 20 najpomembnejših faktorjev za napoved zamude\n(višji gain = pomembnejši)")
+    plt.title(
+        "Top 20 najpomembnejših faktorjev za napoved zamude\n(višji gain = pomembnejši)"
+    )
     plt.tight_layout()
 
     bar_path = os.path.join(REPORTS_DIR, "feature_importance.png")
@@ -222,12 +234,14 @@ def feature_importance_analysis(pipeline: Pipeline, X_sample: pd.DataFrame) -> t
     print(f"  Shranjeno: {comparison_path}")
 
     # ===== CSV s feature importance =====
-    importance_df = pd.DataFrame({
-        "feature": feature_names,
-        "gain": importances["gain"],
-        "weight": importances["weight"],
-        "cover": importances["cover"],
-    }).sort_values("gain", ascending=False)
+    importance_df = pd.DataFrame(
+        {
+            "feature": feature_names,
+            "gain": importances["gain"],
+            "weight": importances["weight"],
+            "cover": importances["cover"],
+        }
+    ).sort_values("gain", ascending=False)
 
     csv_path = os.path.join(REPORTS_DIR, "feature_importance.csv")
     importance_df.to_csv(csv_path, index=False)
@@ -305,7 +319,7 @@ def main():
             mlflow.log_artifact(comparison_path)
             mlflow.log_artifact(os.path.join(REPORTS_DIR, "feature_importance.csv"))
 
-            print("\n✓ MLflow run zabeležen")
+            print("\nMLflow run zabeležen")
 
     finally:
         if use_mlflow:

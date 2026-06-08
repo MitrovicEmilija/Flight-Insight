@@ -2,7 +2,6 @@ import os
 import sys
 import shutil
 
-import yaml
 import pandas as pd
 from evidently import Report
 from evidently.presets import DataDriftPreset, DataSummaryPreset
@@ -41,7 +40,7 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     print(f"Nalagam current: {CURRENT_PATH}")
     current = pd.read_csv(CURRENT_PATH)
-    print(f"  → {len(current):,} vrstic")
+    print(f"{len(current):,} vrstic")
 
     return reference, current
 
@@ -53,13 +52,14 @@ def filter_same_month(reference: pd.DataFrame, current: pd.DataFrame):
 
     # Najdi katere mesece vsebuje current
     current_months = current["Month"].unique().tolist()
-    print(f"\nApples-to-apples filter:")
     print(f"  Current vsebuje meseci: {current_months}")
 
     # Filtriraj reference na iste mesece
     reference_filtered = reference[reference["Month"].isin(current_months)].copy()
     print(f"  Reference pred filtrom: {len(reference):,} vrstic")
-    print(f"  Reference po filtru:    {len(reference_filtered):,} vrstic (samo meseci {current_months})")
+    print(
+        f"  Reference po filtru:    {len(reference_filtered):,} vrstic (samo meseci {current_months})"
+    )
 
     return reference_filtered, current
 
@@ -90,14 +90,21 @@ def run_drift_report(reference: pd.DataFrame, current: pd.DataFrame) -> dict:
     reference = sample_for_speed(reference)
     current = sample_for_speed(current)
 
-    print(f"  Reference končno: {len(reference):,} vrstic, {len(reference.columns)} stolpcev")
-    print(f"  Current   končno: {len(current):,} vrstic, {len(current.columns)} stolpcev")
+    print(
+        f"  Reference končno: {len(reference):,} vrstic, {len(reference.columns)} stolpcev"
+    )
+    print(
+        f"  Current   končno: {len(current):,} vrstic, {len(current.columns)} stolpcev"
+    )
 
     print("\nGeneriranje Evidently poročila...")
-    report = Report([
-        DataSummaryPreset(),
-        DataDriftPreset(),
-    ], include_tests=True)
+    report = Report(
+        [
+            DataSummaryPreset(),
+            DataDriftPreset(),
+        ],
+        include_tests=True,
+    )
 
     snapshot = report.run(reference_data=reference, current_data=current)
 
@@ -129,7 +136,6 @@ def analyze_results(result_dict: dict) -> None:
     print(f"  Neuspešnih: {failed}")
 
     if failed > 0:
-        print(f"\nNeuspeli testi (drift zaznan v):")
         for t in tests:
             if t.get("status") != "SUCCESS":
                 name = t.get("name", "unknown")
@@ -138,7 +144,6 @@ def analyze_results(result_dict: dict) -> None:
 
 
 def update_reference(current_path: str) -> None:
-    """Po uspešnem testiranju kopiraj current → reference za naslednji zagon."""
     os.makedirs(REFERENCE_DIR, exist_ok=True)
     dest = os.path.join(REFERENCE_DIR, "flights_reference.csv")
     shutil.copy(current_path, dest)

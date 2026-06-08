@@ -85,9 +85,10 @@ class HighCardinalityEncoder(BaseEstimator, TransformerMixin):
         for col_idx, col in enumerate(X.columns):
             mapping = self.mappings_[col]
             unknown_idx = mapping["__UNKNOWN__"]
-            # Map vrednosti, neznane → __UNKNOWN__
+
             result[:, col_idx] = (
-                pd.Series(X[col]).astype(str)
+                pd.Series(X[col])
+                .astype(str)
                 .map(mapping)
                 .fillna(unknown_idx)
                 .astype(np.int32)
@@ -102,26 +103,35 @@ class HighCardinalityEncoder(BaseEstimator, TransformerMixin):
 
 def build_preprocessor() -> ColumnTransformer:
     """Zgradi ColumnTransformer za vse features."""
-    numeric_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
+    numeric_pipeline = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
 
-    categorical_low_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-    ])
+    categorical_low_pipeline = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]
+    )
 
-    high_card_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("encoder", HighCardinalityEncoder()),
-    ])
+    high_card_pipeline = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("encoder", HighCardinalityEncoder()),
+        ]
+    )
 
-    preprocessor = ColumnTransformer([
-        ("num", numeric_pipeline, NUMERIC_FEATURES),
-        ("cat_low", categorical_low_pipeline, CATEGORICAL_LOW_CARD),
-        ("cat_high", high_card_pipeline, CATEGORICAL_HIGH_CARD),
-    ], remainder="drop")
+    preprocessor = ColumnTransformer(
+        [
+            ("num", numeric_pipeline, NUMERIC_FEATURES),
+            ("cat_low", categorical_low_pipeline, CATEGORICAL_LOW_CARD),
+            ("cat_high", high_card_pipeline, CATEGORICAL_HIGH_CARD),
+        ],
+        remainder="drop",
+    )
 
     return preprocessor
 
@@ -144,7 +154,9 @@ def select_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-def get_feature_names(preprocessor: ColumnTransformer, X_sample: pd.DataFrame) -> list[str]:
+def get_feature_names(
+    preprocessor: ColumnTransformer, X_sample: pd.DataFrame
+) -> list[str]:
     """Pridobi imena features po preprocessing-u."""
     feature_names = []
 

@@ -1,4 +1,6 @@
 .idea/
+__pycache__/
+*.pyc
 
 # Ignoriraj vse v data/ in models/
 /data/**

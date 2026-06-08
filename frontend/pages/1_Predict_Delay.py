@@ -5,14 +5,15 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
-from model_loader import (
+from model_loader import (  # type: ignore
     load_xgboost_model,
     load_airports,
     load_airlines,
     load_model_metadata,
+    format_airport,
 )
-from monitoring import log_prediction
-from styling import (
+from monitoring import log_prediction  # type: ignore
+from styling import (  # type: ignore
     apply_base_styles,
     page_header,
     section_title,
@@ -21,7 +22,9 @@ from styling import (
 )
 
 
-st.set_page_config(page_title="Predict Delay", page_icon=":material/schedule:", layout="wide")
+st.set_page_config(
+    page_title="Predict Delay", page_icon=":material/schedule:", layout="wide"
+)
 apply_base_styles()
 
 page_header(
@@ -47,8 +50,54 @@ with st.sidebar:
         st.metric("Test RMSE", f"{metrics.get('test_rmse', 0):.2f} min")
         st.metric("Test R²", f"{metrics.get('test_r2', 0):.4f}")
 
-airports = load_airports()
+
+# ===== SENTIMENT INTEGRATION =====
+@st.cache_data
+def load_airline_sentiment():
+    summary_path = (
+        Path(__file__).parent.parent.parent / "reports" / "sentiment_summary.csv"
+    )
+    if not summary_path.exists():
+        return None
+    df = pd.read_csv(summary_path)
+    return df.set_index("airline").to_dict("index")
+
+
+def get_sentiment_pill(sentiment_score):
+    if sentiment_score is None:
+        return "Brez podatkov", "gray", "Sentiment ni dostopen za to družbo."
+    if sentiment_score >= 0.4:
+        return (
+            "Odlične ocene",
+            "green",
+            "Visoko priporočena družba — pozitivne izkušnje potnikov.",
+        )
+    elif sentiment_score >= 0.0:
+        return "Solidne ocene", "green", "Solidno ocenjena družba."
+    elif sentiment_score >= -0.3:
+        return (
+            "Mešane ocene",
+            "amber",
+            "Mešane ocene potnikov — razmisli o alternativah.",
+        )
+    else:
+        return (
+            "Slabe ocene",
+            "red",
+            "Negativne ocene — potniki pogosto poročajo o problemih.",
+        )
+
+
+sentiment_data = load_airline_sentiment()
+
+airports = load_airports()  # zdaj dict {IATA: City}
+airport_codes = list(airports.keys())
 airlines = load_airlines()
+
+
+def airport_label(code):
+    return format_airport(code, airports)
+
 
 section_title("Podatki o letu", icon="edit_note")
 
@@ -57,7 +106,9 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("**Datum in čas**")
     flight_date = st.date_input("Datum leta", value=pd.Timestamp("2025-06-15"))
-    dep_time_str = st.time_input("Načrtovan odhod", value=pd.Timestamp("2025-06-15 14:30").time())
+    dep_time_str = st.time_input(
+        "Načrtovan odhod", value=pd.Timestamp("2025-06-15 14:30").time()
+    )
 
 with col2:
     st.markdown("**Letalska družba**")
@@ -68,17 +119,36 @@ with col2:
         index=0,
     )
     st.markdown("**Letališča**")
-    origin = st.selectbox("Origin (izvor)", airports, index=airports.index("JFK") if "JFK" in airports else 0)
-    dest = st.selectbox("Destination (cilj)", airports, index=airports.index("LAX") if "LAX" in airports else 1)
+    origin = st.selectbox(
+        "Origin (izvor)",
+        airport_codes,
+        index=airport_codes.index("JFK") if "JFK" in airport_codes else 0,
+        format_func=airport_label,
+    )
+    dest = st.selectbox(
+        "Destination (cilj)",
+        airport_codes,
+        index=airport_codes.index("LAX") if "LAX" in airport_codes else 1,
+        format_func=airport_label,
+    )
 
 with col3:
     st.markdown("**Karakteristike leta**")
-    distance = st.number_input("Razdalja (milje)", min_value=50, max_value=6000, value=2475, step=50)
-    elapsed_time = st.number_input("Načrtovano trajanje (min)", min_value=20, max_value=900, value=380, step=10)
+    distance = st.number_input(
+        "Razdalja (milje)", min_value=50, max_value=6000, value=2475, step=50
+    )
+    elapsed_time = st.number_input(
+        "Načrtovano trajanje (min)", min_value=20, max_value=900, value=380, step=10
+    )
 
 divider()
 
-if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":material/insights:"):
+if st.button(
+    "Napovej zamudo",
+    type="primary",
+    use_container_width=True,
+    icon=":material/insights:",
+):
     month = flight_date.month
     day_of_month = flight_date.day
     day_of_week = flight_date.isoweekday()
@@ -96,10 +166,18 @@ if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":
         time_of_day = "night"
 
     season_map = {
-        12: "winter", 1: "winter", 2: "winter",
-        3: "spring", 4: "spring", 5: "spring",
-        6: "summer", 7: "summer", 8: "summer",
-        9: "fall", 10: "fall", 11: "fall",
+        12: "winter",
+        1: "winter",
+        2: "winter",
+        3: "spring",
+        4: "spring",
+        5: "spring",
+        6: "summer",
+        7: "summer",
+        8: "summer",
+        9: "fall",
+        10: "fall",
+        11: "fall",
     }
     season = season_map[month]
 
@@ -134,7 +212,6 @@ if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":
         with st.spinner("Računam napoved..."):
             prediction = float(model.predict(input_df)[0])
 
-        # === LOG PREDICTION (production monitoring) ===
         try:
             log_prediction(
                 model_type="xgboost_delay",
@@ -149,7 +226,6 @@ if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":
         except Exception as log_err:
             st.warning(f"Logiranje napovedi neuspešno: {log_err}")
 
-        # Display
         divider()
         section_title("Rezultat napovedi", icon="analytics")
 
@@ -178,9 +254,96 @@ if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":
                 mae = metadata.get("metrics", {}).get("test_mae", 0)
                 st.metric("Pričakovana napaka (±)", f"{mae:.1f} min")
 
+        # === SENTIMENT INFO O LETALSKI DRUŽBI ===
+        divider()
+        section_title("Mnenja potnikov o tej družbi", icon="chat")
+        st.markdown(
+            f"Analiza mnenj potnikov za **{airlines[airline_code]}** "
+            f"(RoBERTa transformer)."
+        )
+
+        sentiment_score = None
+        if sentiment_data and airline_code in sentiment_data:
+            airline_info = sentiment_data[airline_code]
+            sentiment_score = airline_info.get("sentiment_score")
+            n_positive = airline_info.get("n_positive", 0)
+            n_negative = airline_info.get("n_negative", 0)
+            n_neutral = airline_info.get("n_neutral", 0)
+            total = n_positive + n_negative + n_neutral
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Sentiment score", f"{sentiment_score:+.2f}")
+            with col2:
+                pct_pos = (n_positive / total * 100) if total > 0 else 0
+                st.metric("Pozitivnih", f"{n_positive} ({pct_pos:.0f}%)")
+            with col3:
+                pct_neg = (n_negative / total * 100) if total > 0 else 0
+                st.metric("Negativnih", f"{n_negative} ({pct_neg:.0f}%)")
+            with col4:
+                st.metric("Skupaj reviews", total)
+
+            label, color, recommendation = get_sentiment_pill(sentiment_score)
+            st.markdown(
+                f'<div class="fi-eyebrow">Ocena potnikov</div>'
+                f'<div style="margin-top:.5rem;">{status_pill(label, color)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(recommendation)
+
+            # === KOMBINIRANO PRIPOROČILO ===
+            divider()
+            section_title("Skupna ocena leta", icon="recommend")
+
+            delay_severity = (
+                "ok" if prediction < 15 else ("medium" if prediction < 30 else "high")
+            )
+            sentiment_quality = "good" if sentiment_score >= 0 else "bad"
+
+            if delay_severity == "ok" and sentiment_quality == "good":
+                pill_label = "Odlična izbira"
+                pill_color = "green"
+                summary = "Pričakuje se pravočasen let in družba ima pozitivne ocene potnikov."
+            elif delay_severity == "ok" and sentiment_quality == "bad":
+                pill_label = "Sprejemljiv let"
+                pill_color = "amber"
+                summary = "Verjetno pravočasen, vendar družba ima slabše ocene potnikov. Razmisli o alternativnih ponudnikih."
+            elif delay_severity == "medium" and sentiment_quality == "good":
+                pill_label = "Solidna izbira"
+                pill_color = "amber"
+                summary = "Možna zamuda, vendar družba je sicer dobro ocenjena."
+            elif delay_severity == "high" and sentiment_quality == "good":
+                pill_label = "Pričakuj zamudo"
+                pill_color = "orange"
+                summary = (
+                    "Velika napoved zamude, vendar družba je sicer pozitivno ocenjena."
+                )
+            else:
+                pill_label = "Razmisli o alternativi"
+                pill_color = "red"
+                summary = "Pričakovana zamuda IN slabe ocene potnikov za to družbo."
+
+            st.markdown(
+                f'<div class="fi-eyebrow">Skupna ocena</div>'
+                f'<div style="margin-top:.5rem;">{status_pill(pill_label, pill_color)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**{summary}**")
+            st.caption(
+                "Ocena temelji na kombinaciji XGBoost napovedi zamude in RoBERTa sentiment "
+                "analize zgodovinskih mnenj potnikov za to družbo."
+            )
+
+        else:
+            st.info(
+                f"Za družbo **{airlines[airline_code]}** še ni dovolj podatkov o mnenjih potnikov."
+            )
+
         with st.expander("Podrobnosti napovedi"):
             st.write(f"**Let:** {airlines[airline_code]} ({airline_code})")
-            st.write(f"**Ruta:** {origin} → {dest} ({distance} milj)")
+            origin_label = format_airport(origin, airports)
+            dest_label = format_airport(dest, airports)
+            st.write(f"**Ruta:** {origin_label} → {dest_label} ({distance} milj)")
             st.write(f"**Čas:** {flight_date} ob {dep_time_str}")
             st.write(f"**Del dneva:** {time_of_day}")
             st.write(f"**Sezona:** {season}")
@@ -192,7 +355,7 @@ if st.button("Napovej zamudo", type="primary", use_container_width=True, icon=":
         **Kaj to pomeni?**
 
         Napovedana zamuda {prediction:.1f} min temelji na zgodovinskih podatkih
-        ~7M letov iz 2024. Pričakovana napaka napovedi je ±{metadata.get('metrics', {}).get('test_mae', 21):.1f} min.
+        ~7M letov iz 2024. Pričakovana napaka napovedi je ±{metadata.get("metrics", {}).get("test_mae", 21):.1f} min.
         """)
 
     except Exception as e:
